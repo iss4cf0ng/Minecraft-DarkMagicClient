@@ -28,7 +28,7 @@ public abstract class Module {
     }
 
     public void toggle() {
-        this.enabled = !this.enabled;
+        setEnabled(!this.enabled);
     }
 
     public void onTick() {}
@@ -41,4 +41,18 @@ public abstract class Module {
     public boolean isEnabled() { return enabled; }
 
     public String getDisplayLabel() { return name; }
+
+    public void onEnable() {}
+
+    public void onDisable() {}
+
+    public void setEnabled(boolean enabled) {
+        if (this.enabled == enabled) return;
+        this.enabled = enabled;
+        if (enabled) {
+            onEnable();
+        } else {
+            onDisable();
+        }
+    }
 }

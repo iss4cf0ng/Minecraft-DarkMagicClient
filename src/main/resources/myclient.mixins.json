@@ -9,7 +9,8 @@
 		"PlayerMixin",
 		"LightTextureMixin",
 		"PacketMixin",
-		"LiquidBlockMixin"
+		"LiquidBlockMixin",
+		"WaterVisionMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

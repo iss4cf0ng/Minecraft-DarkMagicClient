@@ -4,9 +4,11 @@ import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.myclient.module.UnlimitedVoid;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
@@ -94,6 +96,22 @@ public class MyClient implements ModInitializer {
 		return false;
 	}
 
+	private static void spawnExtinguishParticles(net.minecraft.world.level.Level world, BlockPos pos) {
+		if (world instanceof ServerLevel serverLevel) {
+			serverLevel.sendParticles(
+					ParticleTypes.SPLASH,
+					pos.getX() + 0.5,
+					pos.getY() + 0.5,
+					pos.getZ() + 0.5,
+					12,
+					0.35,
+					0.35,
+					0.35,
+					0.05
+			);
+		}
+	}
+
 	@Override
 	public void onInitialize() {
 		LOGGER.info("Initializing...");
@@ -140,20 +158,195 @@ public class MyClient implements ModInitializer {
 		modules.add(new BlinkModule());
 		modules.add(new FastEatModule());
 		modules.add(new LiquidsModule());
+		modules.add(new MultiBuilderModule());
+		modules.add(new MegaExtinguisherModule());
+		modules.add(new AvadaKedavraModule());
+		modules.add(new WaterVisionModule());
 
 		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
-			if (!world.isClientSide() && isModuleEnabled("MegaLighter") && player.getItemInHand(hand).is(Items.FLINT_AND_STEEL)) {
-				BlockPos centerPos = hitResult.getBlockPos();
-				for (int dx = -3; dx != 4; dx++) {
-					for (int dy = -2; dy != 3; dy++) {
-						for (int dz = -3; dz != 4; dz++) {
-							BlockPos targetPos = centerPos.offset(dx, dy, dz);
-							BlockPos abovePos = targetPos.above();
+			if (!world.isClientSide() && isModuleEnabled("MegaExtinguisher")) {
+				ItemStack stack = player.getItemInHand(hand);
+				if (stack.is(Items.WATER_BUCKET)) {
+					BlockPos centerPos = hitResult.getBlockPos();
+					int extinguishedCount = 0;
 
-							if (!world.getBlockState(targetPos).isAir() && world.getBlockState(abovePos).isAir()) {
-								world.setBlockAndUpdate(abovePos, BaseFireBlock.getState(world, abovePos));
+					for (int dx = -3; dx != 4; dx++) {
+						for (int dy = -2; dy != 3; dy++) {
+							for (int dz = -3; dz != 4; dz++) {
+								BlockPos targetPos = centerPos.offset(dx, dy, dz);
+								BlockState state = world.getBlockState(targetPos);
+
+								if (state.getBlock() instanceof BaseFireBlock) {
+									if (world.setBlockAndUpdate(targetPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())) {
+										extinguishedCount++;
+										spawnExtinguishParticles(world, targetPos);
+									}
+									continue;
+								}
+
+								if (state.getBlock() instanceof net.minecraft.world.level.block.CampfireBlock
+										&& state.getValue(net.minecraft.world.level.block.CampfireBlock.LIT)) {
+									world.setBlockAndUpdate(
+											targetPos,
+											state.setValue(net.minecraft.world.level.block.CampfireBlock.LIT, false)
+									);
+									extinguishedCount++;
+									spawnExtinguishParticles(world, targetPos);
+									continue;
+								}
+
+								if (state.getBlock() instanceof net.minecraft.world.level.block.CandleBlock
+										&& state.getValue(net.minecraft.world.level.block.CandleBlock.LIT)) {
+									world.setBlockAndUpdate(
+											targetPos,
+											state.setValue(net.minecraft.world.level.block.CandleBlock.LIT, false)
+									);
+									extinguishedCount++;
+									spawnExtinguishParticles(world, targetPos);
+								}
 							}
 						}
+					}
+
+					if (extinguishedCount > 0) {
+						world.playSound(
+								null,
+								centerPos,
+								SoundEvents.FIRE_EXTINGUISH,
+								SoundSource.BLOCKS,
+								1.0F,
+								1.0F
+						);
+						return InteractionResult.SUCCESS;
+					}
+				}
+			}
+
+			return InteractionResult.PASS;
+		});
+
+		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
+			if (!world.isClientSide() && isModuleEnabled("MultiBuilder")) {
+				ItemStack stack = player.getItemInHand(hand);
+				if (stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem) {
+					MultiBuilderModule builder = null;
+					for (Module m : modules) {
+						if (m instanceof MultiBuilderModule mb) {
+							builder = mb;
+							break;
+						}
+					}
+
+					if (builder != null) {
+						net.minecraft.world.level.block.Block placeBlock = blockItem.getBlock();
+						BlockState placeState = placeBlock.defaultBlockState();
+						net.minecraft.core.Direction facing = player.getDirection();
+						net.minecraft.core.Direction right = facing.getClockWise();
+						BlockPos basePos = hitResult.getBlockPos();
+
+						java.util.List<BlockPos> targets = new java.util.ArrayList<>();
+
+						if (builder.getMode() == MultiBuilderModule.BuildMode.WALL) {
+							BlockPos wallOrigin = basePos.relative(hitResult.getDirection());
+							for (int h = 0; h < 3; h++) {
+								for (int w = -2; w <= 2; w++) {
+									targets.add(wallOrigin.above(h).relative(right, w));
+								}
+							}
+						} else {
+							BlockPos bridgeOrigin = basePos.relative(facing);
+							for (int step = 0; step < 6; step++) {
+								for (int w = -1; w <= 1; w++) {
+									targets.add(bridgeOrigin.relative(facing, step).relative(right, w));
+								}
+							}
+						}
+
+						int placedCount = 0;
+						for (BlockPos targetPos : targets) {
+							if (!world.isInWorldBounds(targetPos)) continue;
+							BlockState currentState = world.getBlockState(targetPos);
+							if (!currentState.canBeReplaced()) continue;
+							if (!player.isCreative() && stack.getCount() <= placedCount) break;
+
+							if (world.setBlockAndUpdate(targetPos, placeState)) {
+								placedCount++;
+							}
+						}
+
+						if (!player.isCreative() && placedCount > 0) {
+							stack.shrink(placedCount);
+						}
+
+						if (placedCount > 0) {
+							return InteractionResult.SUCCESS;
+						}
+					}
+				}
+			}
+
+			return InteractionResult.PASS;
+		});
+
+		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
+			if (!world.isClientSide() && isModuleEnabled("MegaLighter")) {
+				ItemStack stack = player.getItemInHand(hand);
+				if (stack.is(Items.FLINT_AND_STEEL)) {
+					BlockPos centerPos = hitResult.getBlockPos();
+					int litCount = 0;
+
+					for (int dx = -3; dx != 4; dx++) {
+						for (int dy = -2; dy != 3; dy++) {
+							for (int dz = -3; dz != 4; dz++) {
+								BlockPos targetPos = centerPos.offset(dx, dy, dz);
+								BlockState targetState = world.getBlockState(targetPos);
+								if (targetState.isAir()) continue;
+
+								net.minecraft.world.phys.BlockHitResult subHit = new net.minecraft.world.phys.BlockHitResult(
+										Vec3.atCenterOf(targetPos),
+										net.minecraft.core.Direction.UP,
+										targetPos,
+										false
+								);
+								net.minecraft.world.item.context.UseOnContext ctx =
+										new net.minecraft.world.item.context.UseOnContext(player, hand, subHit);
+
+								InteractionResult subResult = stack.getItem().useOn(ctx);
+								if (subResult.consumesAction()) {
+									litCount++;
+									continue;
+								}
+
+								BlockPos abovePos = targetPos.above();
+								BlockState aboveState = world.getBlockState(abovePos);
+								BlockState fireState = BaseFireBlock.getState(world, abovePos);
+								if (aboveState.canBeReplaced() && fireState.canSurvive(world, abovePos)) {
+									if (world.setBlockAndUpdate(abovePos, fireState)) {
+										litCount++;
+									}
+								}
+							}
+						}
+					}
+
+					if (litCount > 0) {
+						world.playSound(
+								null,
+								centerPos,
+								SoundEvents.FLINTANDSTEEL_USE,
+								SoundSource.BLOCKS,
+								1.0F,
+								world.getRandom().nextFloat() * 0.4F + 0.8F
+						);
+
+						if (!player.isCreative() && player instanceof ServerPlayer serverPlayer) {
+							stack.hurtAndBreak(1, serverPlayer,
+									hand == InteractionHand.MAIN_HAND
+											? net.minecraft.world.entity.EquipmentSlot.MAINHAND
+											: net.minecraft.world.entity.EquipmentSlot.OFFHAND);
+						}
+
+						return InteractionResult.SUCCESS;
 					}
 				}
 			}
@@ -254,6 +447,78 @@ public class MyClient implements ModInitializer {
 				return false;
 			}
 			return true;
+		});
+
+		ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
+			if (!message.startsWith(".unlimitedvoid")) {
+				return true;
+			}
+
+			Minecraft mc = Minecraft.getInstance();
+			String rest = message.length() > ".unlimitedvoid".length()
+					? message.substring(".unlimitedvoid".length()).trim()
+					: "";
+
+			if (rest.isEmpty()) {
+				if (mc.player != null) {
+					mc.player.displayClientMessage(
+							Component.literal("§c[MyClient] Usage: .unlimitedvoid <player> [count] | .unlimitedvoid clear [player]"),
+							false
+					);
+				}
+				return false;
+			}
+
+			String[] parts = rest.split("\\s+");
+
+			if (parts[0].equalsIgnoreCase("clear")) {
+				if (mc.level != null && mc.player != null) {
+					net.minecraft.world.phys.Vec3 center = mc.player.position();
+					if (parts.length >= 2 && mc.getSingleplayerServer() != null) {
+						var tp = mc.getSingleplayerServer().getPlayerList().getPlayerByName(parts[1]);
+						if (tp != null) {
+							center = tp.position();
+						}
+					}
+					net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(center, center).inflate(16.0);
+					var arrows = mc.level.getEntitiesOfClass(net.minecraft.world.entity.projectile.Arrow.class, box);
+					int removed = 0;
+					for (var arrow : arrows) {
+						arrow.discard();
+						removed++;
+					}
+					mc.player.displayClientMessage(
+							Component.literal("§b[MyClient] §fCleared §e" + removed + " §farrows."),
+							false
+					);
+				}
+				return false;
+			}
+
+			String targetName = parts[0];
+			int count = 500;
+			if (parts.length >= 2) {
+				try {
+					count = Integer.parseInt(parts[1]);
+				} catch (NumberFormatException e) {
+					if (mc.player != null) {
+						mc.player.displayClientMessage(
+								Component.literal("§c[MyClient] Invalid count: §f" + parts[1]),
+								false
+						);
+					}
+					return false;
+				}
+			}
+
+			UnlimitedVoid.triggerForPlayer(mc, targetName, count, 0.25);
+			if (mc.player != null) {
+				mc.player.displayClientMessage(
+						Component.literal("§b[MyClient] §fUnlimitedVoid -> §e" + targetName + " §f(§e" + count + "§f)"),
+						false
+				);
+			}
+			return false;
 		});
 	}
 
@@ -882,8 +1147,88 @@ public class MyClient implements ModInitializer {
 	}
 
 	public static class HealthTagsModule extends Module {
+		private static final double AIM_MAX_DISTANCE = 48.0;
+		private static final double LIST_MAX_DISTANCE = 36.0;
+
 		public HealthTagsModule() {
 			super("HealthTags", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		private LivingEntity findAimedLivingEntity(Minecraft mc, double maxDistance) {
+			if (mc.player == null || mc.level == null) return null;
+
+			Vec3 eyePos = mc.player.getEyePosition(1.0F);
+			Vec3 look = mc.player.getLookAngle().normalize();
+			Vec3 rayEnd = eyePos.add(look.scale(maxDistance));
+
+			net.minecraft.world.phys.BlockHitResult blockHit = mc.level.clip(
+					new net.minecraft.world.level.ClipContext(
+							eyePos,
+							rayEnd,
+							net.minecraft.world.level.ClipContext.Block.COLLIDER,
+							net.minecraft.world.level.ClipContext.Fluid.NONE,
+							mc.player
+					)
+			);
+			double maxAllowedDistSq = blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS
+					? eyePos.distanceToSqr(blockHit.getLocation())
+					: maxDistance * maxDistance;
+
+			LivingEntity bestTarget = null;
+			double bestDistSq = maxAllowedDistSq;
+
+			for (Entity entity : mc.level.entitiesForRendering()) {
+				if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
+				if (!living.isAlive() || living.isRemoved()) continue;
+
+				AABB box = living.getBoundingBox().inflate(0.25);
+				java.util.Optional<Vec3> hitOpt = box.clip(eyePos, rayEnd);
+				if (hitOpt.isPresent()) {
+					double distSq = eyePos.distanceToSqr(hitOpt.get());
+					if (distSq < bestDistSq) {
+						bestDistSq = distSq;
+						bestTarget = living;
+					}
+				}
+			}
+
+			return bestTarget;
+		}
+
+		private ItemStack getTargetHeldItem(LivingEntity target) {
+			ItemStack mainHand = target.getMainHandItem();
+			if (!mainHand.isEmpty()) {
+				return mainHand;
+			}
+			ItemStack offHand = target.getOffhandItem();
+			if (!offHand.isEmpty()) {
+				return offHand;
+			}
+			return ItemStack.EMPTY;
+		}
+
+		private String buildHeldItemText(ItemStack stack) {
+			if (stack == null || stack.isEmpty()) return "";
+
+			String itemName = stack.getHoverName().getString();
+			int count = stack.getCount();
+			String countSuffix = count > 1 ? " x" + count : "";
+
+			net.minecraft.world.item.enchantment.ItemEnchantments enchants = stack.getEnchantments();
+			java.util.List<String> enchList = new java.util.ArrayList<>();
+			for (var entry : enchants.entrySet()) {
+				String fullName = net.minecraft.world.item.enchantment.Enchantment
+						.getFullname(entry.getKey(), entry.getIntValue())
+						.getString();
+				enchList.add(fullName);
+			}
+
+			if (enchList.isEmpty()) {
+				return String.format("§eItem: §f%s%s", itemName, countSuffix);
+			}
+
+			return String.format("§eItem: §f%s%s §b[%s]",
+					itemName, countSuffix, String.join(", ", enchList));
 		}
 
 		@Override
@@ -894,9 +1239,14 @@ public class MyClient implements ModInitializer {
 			int screenWidth = mc.getWindow().getGuiScaledWidth();
 			int screenHeight = mc.getWindow().getGuiScaledHeight();
 
-			if (mc.crosshairPickEntity instanceof LivingEntity target && target.isAlive()) {
+			LivingEntity target = findAimedLivingEntity(mc, AIM_MAX_DISTANCE);
+			if (target == null && mc.crosshairPickEntity instanceof LivingEntity picked && picked.isAlive()) {
+				target = picked;
+			}
+
+			if (target != null && target.isAlive()) {
 				float hp = target.getHealth();
-				float maxHp = target.getMaxHealth();
+				float maxHp = Math.max(1.0F, target.getMaxHealth());
 				float ratio = Math.min(1.0F, Math.max(0.0F, hp / maxHp));
 
 				java.util.Collection<MobEffectInstance> effects = target.getActiveEffects();
@@ -921,17 +1271,30 @@ public class MyClient implements ModInitializer {
 				String statusText = statusBuilder.toString().trim();
 				boolean hasEffects = !statusText.isEmpty();
 
-				int textWidth = hasEffects ? mc.font.width(statusText) + 12 : 115;
-				int hudW = Math.max(115, textWidth);
-				int hudH = hasEffects ? 38 : 26;
+				ItemStack heldItem = getTargetHeldItem(target);
+				String itemText = buildHeldItemText(heldItem);
+				boolean hasItem = !itemText.isEmpty();
+
+				String headerText = String.format("§f%s §7(%.1f/%.0f) §8[%.1fm]",
+						target.getName().getString(), hp, maxHp, mc.player.distanceTo(target));
+
+				int maxLineWidth = mc.font.width(headerText);
+				if (hasItem) {
+					maxLineWidth = Math.max(maxLineWidth, mc.font.width(itemText));
+				}
+				if (hasEffects) {
+					maxLineWidth = Math.max(maxLineWidth, mc.font.width(statusText));
+				}
+
+				int hudW = Math.max(115, maxLineWidth + 12);
+				int hudH = 25 + (hasItem ? 11 : 0) + (hasEffects ? 11 : 0);
 				int hudX = (screenWidth / 2) + 12;
 				int hudY = (screenHeight / 2) + 12;
 
 				g.fill(hudX, hudY, hudX + hudW, hudY + hudH, 0xCC10141A);
 				g.fill(hudX, hudY, hudX + hudW, hudY + 1, 0xFF00FFFF);
 
-				String info = String.format("§f%s §7(%.1f/%.0f)", target.getName().getString(), hp, maxHp);
-				g.drawString(mc.font, info, hudX + 5, hudY + 4, 0xFFFFFF);
+				g.drawString(mc.font, headerText, hudX + 5, hudY + 4, 0xFFFFFF);
 
 				int barX = hudX + 5;
 				int barY = hudY + 16;
@@ -941,16 +1304,28 @@ public class MyClient implements ModInitializer {
 				int barColor = ratio > 0.5F ? 0xFF22EE22 : (ratio > 0.25F ? 0xFFFFCC00 : 0xFFFF2222);
 				g.fill(barX, barY, barX + (int) (barMaxW * ratio), barY + 5, barColor);
 
+				int nextTextY = hudY + 25;
+				if (hasItem) {
+					g.drawString(mc.font, itemText, hudX + 5, nextTextY, 0xFFFFFF);
+					nextTextY += 11;
+				}
 				if (hasEffects) {
-					g.drawString(mc.font, statusText, hudX + 5, hudY + 25, 0xFFFFFF);
+					g.drawString(mc.font, statusText, hudX + 5, nextTextY, 0xFFFFFF);
 				}
 			}
 
-			int listY = screenHeight - 60;
-			int count = 0;
+			java.util.List<LivingEntity> nearby = new java.util.ArrayList<>();
 			for (Entity entity : mc.level.entitiesForRendering()) {
 				if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
-				if (!living.isAlive() || mc.player.distanceTo(living) > 15.0) continue;
+				if (!living.isAlive() || living.isRemoved()) continue;
+				if (mc.player.distanceTo(living) > LIST_MAX_DISTANCE) continue;
+				nearby.add(living);
+			}
+			nearby.sort(java.util.Comparator.comparingDouble(e -> mc.player.distanceToSqr(e)));
+
+			int listY = screenHeight - 60;
+			int count = 0;
+			for (LivingEntity living : nearby) {
 				if (count >= 5) break;
 
 				float hp = living.getHealth();
@@ -1067,16 +1442,23 @@ public class MyClient implements ModInitializer {
 			Minecraft mc = Minecraft.getInstance();
 			if (mc.player == null || mc.getConnection() == null) return;
 
-			if (mc.player.fallDistance > 2.5F) {
+			if (mc.player.fallDistance > 2.0F) {
 				mc.getConnection().send(new ServerboundMovePlayerPacket.StatusOnly(
 						true,
 						mc.player.horizontalCollision
 				));
 
 				mc.player.fallDistance = 0.0F;
-				if (mc.getSingleplayerServer() != null) {
-					ServerPlayer sp = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-					if (sp != null) sp.fallDistance = 0.0F;
+
+				net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
+				if (server != null) {
+					java.util.UUID playerId = mc.player.getUUID();
+					server.execute(() -> {
+						ServerPlayer sp = server.getPlayerList().getPlayer(playerId);
+						if (sp != null) {
+							sp.fallDistance = 0.0F;
+						}
+					});
 				}
 			}
 		}
@@ -1358,8 +1740,30 @@ public class MyClient implements ModInitializer {
 	}
 
 	public static class FullbrightModule extends Module {
+		private Double savedGamma = null;
+
 		public FullbrightModule() {
 			super("Fullbright", Category.RENDER, GLFW.GLFW_KEY_B);
+		}
+
+		@Override
+		public void onEnable() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.options != null) {
+				if (savedGamma == null) {
+					savedGamma = mc.options.gamma().get();
+				}
+				mc.options.gamma().set(15.0);
+			}
+		}
+
+		@Override
+		public void onDisable() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.options != null && savedGamma != null) {
+				mc.options.gamma().set(savedGamma);
+				savedGamma = null;
+			}
 		}
 	}
 
@@ -1462,19 +1866,23 @@ public class MyClient implements ModInitializer {
 			if (mc.options.keyUse.isDown() && castCooldown == 0) {
 				castCooldown = 10;
 
-				if (mc.getSingleplayerServer() != null) {
-					ServerPlayer serverPlayer = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-					if (serverPlayer != null) {
-						ServerLevel serverLevel = serverPlayer.serverLevel();
-						Vec3 eyePos = serverPlayer.getEyePosition();
-						Vec3 look = serverPlayer.getLookAngle().normalize();
+				MinecraftServer server = mc.getSingleplayerServer();
+				if (server != null) {
+					java.util.UUID playerId = mc.player.getUUID();
+					Vec3 eyePos = mc.player.getEyePosition();
+					Vec3 look = mc.player.getLookAngle().normalize();
 
+					server.execute(() -> {
+						ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
+						if (serverPlayer == null) return;
+
+						ServerLevel serverLevel = serverPlayer.serverLevel();
 						serverLevel.playSound(null, serverPlayer.blockPosition(),
 								SoundEvents.WITHER_SPAWN, SoundSource.PLAYERS, 1.0F, 1.0F);
 
-						java.util.Set<Entity> hitEntities = new java.util.HashSet<>();
+						java.util.Set<LivingEntity> hitEntities = new java.util.LinkedHashSet<>();
 
-						for (int step = 2; step != 122; step++) {
+						for (int step = 2; step < 122; step++) {
 							double dist = step * 0.5;
 							Vec3 point = eyePos.add(look.scale(dist));
 
@@ -1491,28 +1899,32 @@ public class MyClient implements ModInitializer {
 							);
 
 							for (LivingEntity target : serverLevel.getEntitiesOfClass(LivingEntity.class, coneBox)) {
-								if (target == serverPlayer || !target.isAlive() || hitEntities.contains(target)) continue;
-
+								if (target == serverPlayer || !target.isAlive() || target.isRemoved()) continue;
 								hitEntities.add(target);
-
-								target.hurtServer(serverLevel, serverLevel.damageSources().magic(), 20.0F);
-
-								target.knockback(1.5, -look.x, -look.z);
-								target.hurtMarked = true;
-
-								net.minecraft.core.particles.ColorParticleOption poisonParticle =
-										net.minecraft.core.particles.ColorParticleOption.create(ParticleTypes.ENTITY_EFFECT, 0xFF4E9331);
-								net.minecraft.core.particles.ColorParticleOption regenParticle =
-										net.minecraft.core.particles.ColorParticleOption.create(ParticleTypes.ENTITY_EFFECT, 0xFFCD5CAB);
-
-								serverLevel.sendParticles(poisonParticle, target.getX(), target.getEyeY(), target.getZ(), 25, 0.5, 0.5, 0.5, 0.1);
-								serverLevel.sendParticles(regenParticle, target.getX(), target.getEyeY(), target.getZ(), 25, 0.5, 0.5, 0.5, 0.1);
-								serverLevel.playSound(null, target.blockPosition(),
-										SoundEvents.SPLASH_POTION_BREAK, SoundSource.PLAYERS, 1.0F, 1.0F);
 							}
 						}
-					}
+
+						net.minecraft.core.particles.ColorParticleOption poisonParticle =
+								net.minecraft.core.particles.ColorParticleOption.create(ParticleTypes.ENTITY_EFFECT, 0xFF4E9331);
+						net.minecraft.core.particles.ColorParticleOption regenParticle =
+								net.minecraft.core.particles.ColorParticleOption.create(ParticleTypes.ENTITY_EFFECT, 0xFFCD5CAB);
+
+						for (LivingEntity target : hitEntities) {
+							if (!target.isAlive() || target.isRemoved()) continue;
+
+							target.hurtServer(serverLevel, serverLevel.damageSources().magic(), 20.0F);
+
+							target.knockback(1.5, -look.x, -look.z);
+							target.hurtMarked = true;
+
+							serverLevel.sendParticles(poisonParticle, target.getX(), target.getEyeY(), target.getZ(), 25, 0.5, 0.5, 0.5, 0.1);
+							serverLevel.sendParticles(regenParticle, target.getX(), target.getEyeY(), target.getZ(), 25, 0.5, 0.5, 0.5, 0.1);
+							serverLevel.playSound(null, target.blockPosition(),
+									SoundEvents.SPLASH_POTION_BREAK, SoundSource.PLAYERS, 1.0F, 1.0F);
+						}
+					});
 				}
+
 				mc.player.swing(InteractionHand.MAIN_HAND);
 			}
 		}
@@ -1527,14 +1939,14 @@ public class MyClient implements ModInitializer {
 			final ServerLevel level;
 			final LivingEntity target;
 			Vec3 lastKnownPos;
-			final ServerPlayer caster;
+			final java.util.UUID casterId;
 			int fuseTicks = 40;
 
-			DelayedExplosion(ServerLevel level, LivingEntity target, ServerPlayer caster) {
+			DelayedExplosion(ServerLevel level, LivingEntity target, java.util.UUID casterId) {
 				this.level = level;
 				this.target = target;
 				this.lastKnownPos = target.position();
-				this.caster = caster;
+				this.casterId = casterId;
 			}
 		}
 
@@ -1552,75 +1964,86 @@ public class MyClient implements ModInitializer {
 			if (globalCooldown > 0) globalCooldown--;
 			if (burstInterval > 0) burstInterval--;
 
-			java.util.Iterator<DelayedExplosion> it = pendingExplosions.iterator();
-			while (it.hasNext()) {
-				DelayedExplosion exp = it.next();
-				exp.fuseTicks--;
-
-				if (exp.target != null && exp.target.isAlive()) {
-					exp.lastKnownPos = exp.target.position();
-				}
-
-				if (exp.fuseTicks % 4 == 0) {
-					exp.level.sendParticles(ParticleTypes.DRAGON_BREATH,
-							exp.lastKnownPos.x, exp.lastKnownPos.y + 1.0, exp.lastKnownPos.z, 6, 0.3, 0.4, 0.3, 0.02);
-				}
-
-				if (exp.fuseTicks == 0) {
-					exp.level.playSound(null, BlockPos.containing(exp.lastKnownPos.x, exp.lastKnownPos.y, exp.lastKnownPos.z),
-							SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 1.5F, 1.0F);
-
-					exp.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER,
-							exp.lastKnownPos.x, exp.lastKnownPos.y + 0.5, exp.lastKnownPos.z, 1, 0.0, 0.0, 0.0, 0.0);
-
-					AABB blastBox = new AABB(
-							exp.lastKnownPos.x - 4.0, exp.lastKnownPos.y - 3.0, exp.lastKnownPos.z - 4.0,
-							exp.lastKnownPos.x + 4.0, exp.lastKnownPos.y + 3.0, exp.lastKnownPos.z + 4.0
-					);
-					for (LivingEntity victim : exp.level.getEntitiesOfClass(LivingEntity.class, blastBox)) {
-						if (victim == exp.caster || !victim.isAlive()) continue;
-
-						victim.hurtServer(exp.level, exp.level.damageSources().explosion(exp.caster, exp.caster), 8.0F);
-
-						if (victim == exp.target) {
-							victim.push(0.0, 0.65, 0.0);
-						} else {
-							Vec3 pushDir = victim.position().subtract(exp.lastKnownPos).normalize();
-							victim.push(pushDir.x * 0.8, 0.45, pushDir.z * 0.8);
-						}
-						victim.hurtMarked = true;
-					}
-
-					it.remove();
-				}
-			}
-
-
 			if (mc.options.keyUse.isDown() && burstRemaining == 0 && globalCooldown == 0) {
 				burstRemaining = 5;
 				burstInterval = 0;
 				globalCooldown = 25;
 			}
 
+			boolean fireShotNow = false;
 			if (burstRemaining > 0 && burstInterval == 0) {
 				burstRemaining--;
 				burstInterval = 3;
+				fireShotNow = true;
+				mc.player.swing(InteractionHand.MAIN_HAND);
+			}
 
-				if (mc.getSingleplayerServer() != null) {
-					ServerPlayer serverPlayer = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
+			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
+			if (server == null) return;
+
+			java.util.UUID playerId = mc.player.getUUID();
+			Vec3 eyePos = mc.player.getEyePosition();
+			Vec3 look = mc.player.getLookAngle().normalize();
+			boolean shouldFire = fireShotNow;
+
+			server.execute(() -> {
+				java.util.Iterator<DelayedExplosion> it = pendingExplosions.iterator();
+				while (it.hasNext()) {
+					DelayedExplosion exp = it.next();
+					exp.fuseTicks--;
+
+					if (exp.target != null && exp.target.isAlive() && !exp.target.isRemoved()) {
+						exp.lastKnownPos = exp.target.position();
+					}
+
+					if (exp.fuseTicks % 4 == 0) {
+						exp.level.sendParticles(ParticleTypes.DRAGON_BREATH,
+								exp.lastKnownPos.x, exp.lastKnownPos.y + 1.0, exp.lastKnownPos.z, 6, 0.3, 0.4, 0.3, 0.02);
+					}
+
+					if (exp.fuseTicks <= 0) {
+						exp.level.playSound(null, BlockPos.containing(exp.lastKnownPos.x, exp.lastKnownPos.y, exp.lastKnownPos.z),
+								SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 1.5F, 1.0F);
+
+						exp.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER,
+								exp.lastKnownPos.x, exp.lastKnownPos.y + 0.5, exp.lastKnownPos.z, 1, 0.0, 0.0, 0.0, 0.0);
+
+						ServerPlayer casterEntity = server.getPlayerList().getPlayer(exp.casterId);
+
+						AABB blastBox = new AABB(
+								exp.lastKnownPos.x - 4.0, exp.lastKnownPos.y - 3.0, exp.lastKnownPos.z - 4.0,
+								exp.lastKnownPos.x + 4.0, exp.lastKnownPos.y + 3.0, exp.lastKnownPos.z + 4.0
+						);
+						for (LivingEntity victim : exp.level.getEntitiesOfClass(LivingEntity.class, blastBox)) {
+							if (!victim.isAlive() || victim.isRemoved()) continue;
+							if (victim.getUUID().equals(exp.casterId)) continue;
+
+							victim.hurtServer(exp.level, exp.level.damageSources().explosion(casterEntity, casterEntity), 30.0F);
+
+							if (victim == exp.target) {
+								victim.push(0.0, 0.65, 0.0);
+							} else {
+								Vec3 pushDir = victim.position().subtract(exp.lastKnownPos).normalize();
+								victim.push(pushDir.x * 0.8, 0.45, pushDir.z * 0.8);
+							}
+							victim.hurtMarked = true;
+						}
+
+						it.remove();
+					}
+				}
+
+				if (shouldFire) {
+					ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
 					if (serverPlayer != null) {
 						ServerLevel serverLevel = serverPlayer.serverLevel();
-						Vec3 eyePos = serverPlayer.getEyePosition();
-						Vec3 look = serverPlayer.getLookAngle().normalize();
-
 						serverLevel.playSound(null, serverPlayer.blockPosition(),
 								SoundEvents.ENDER_DRAGON_GROWL, SoundSource.PLAYERS, 0.8F, 1.4F);
 
-						java.util.Set<Entity> hitEntities = new java.util.HashSet<>();
-						Vec3 endPoint = eyePos.add(look.scale(30.0));
+						java.util.Set<LivingEntity> hitEntities = new java.util.LinkedHashSet<>();
 						int explosionsAddedThisShot = 0;
 
-						for (int step = 2; step != 122; step++) {
+						for (int step = 2; step < 122; step++) {
 							double dist = step * 0.5;
 							Vec3 point = eyePos.add(look.scale(dist));
 							double coneRadius = 0.8 + (dist * 0.30);
@@ -1638,28 +2061,24 @@ public class MyClient implements ModInitializer {
 							);
 
 							for (LivingEntity target : serverLevel.getEntitiesOfClass(LivingEntity.class, coneBox)) {
-								if (target == serverPlayer || !target.isAlive() || hitEntities.contains(target)) continue;
+								if (target == serverPlayer || !target.isAlive() || target.isRemoved()) continue;
+								if (hitEntities.contains(target)) continue;
 
 								hitEntities.add(target);
 
-								Vec3 hitLocation = new Vec3(target.getX(), target.getY(), target.getZ());
-
 								target.hurtServer(serverLevel, serverLevel.damageSources().sonicBoom(serverPlayer), 2.0F);
-
 								target.knockback(0.4, -look.x, -look.z);
 								target.hurtMarked = true;
 
-								if (explosionsAddedThisShot != 2) {
-									pendingExplosions.add(new DelayedExplosion(serverLevel, target, serverPlayer));
+								if (explosionsAddedThisShot < 2) {
+									pendingExplosions.add(new DelayedExplosion(serverLevel, target, playerId));
 									explosionsAddedThisShot++;
 								}
-
 							}
 						}
 					}
 				}
-				mc.player.swing(InteractionHand.MAIN_HAND);
-			}
+			});
 		}
 	}
 
@@ -1669,13 +2088,13 @@ public class MyClient implements ModInitializer {
 		private static class TrackedWaterBomb {
 			final ServerLevel level;
 			final ThrownPotion potion;
-			final ServerPlayer caster;
+			final java.util.UUID casterId;
 			Vec3 lastPos;
 
-			TrackedWaterBomb(ServerLevel level, ThrownPotion potion, ServerPlayer caster) {
+			TrackedWaterBomb(ServerLevel level, ThrownPotion potion, java.util.UUID casterId) {
 				this.level = level;
 				this.potion = potion;
-				this.caster = caster;
+				this.casterId = casterId;
 				this.lastPos = potion.position();
 			}
 		}
@@ -1695,85 +2114,94 @@ public class MyClient implements ModInitializer {
 				castCooldown--;
 			}
 
-			java.util.Iterator<TrackedWaterBomb> it = activeBombs.iterator();
-			while (it.hasNext()) {
-				TrackedWaterBomb bomb = it.next();
-
-				if (bomb.potion.isAlive()) {
-					bomb.lastPos = bomb.potion.position();
-					bomb.level.sendParticles(ParticleTypes.SPLASH, bomb.lastPos.x, bomb.lastPos.y, bomb.lastPos.z, 4, 0.1, 0.1, 0.1, 0.05);
-					bomb.level.sendParticles(ParticleTypes.NAUTILUS, bomb.lastPos.x, bomb.lastPos.y, bomb.lastPos.z, 2, 0.1, 0.1, 0.1, 0.02);
-				} else {
-					Vec3 center = bomb.lastPos;
-
-					bomb.level.playSound(null, BlockPos.containing(center.x, center.y, center.z),
-							SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 1.8F, 0.85F);
-					bomb.level.playSound(null, BlockPos.containing(center.x, center.y, center.z),
-							SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, 1.2F, 1.4F);
-
-					bomb.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, center.x, center.y + 0.5, center.z, 3, 1.2, 0.5, 1.2, 0.0);
-					bomb.level.sendParticles(ParticleTypes.SPLASH, center.x, center.y + 1.0, center.z, 80, 2.5, 1.5, 2.5, 0.3);
-					bomb.level.sendParticles(ParticleTypes.NAUTILUS, center.x, center.y + 1.0, center.z, 50, 2.0, 1.5, 2.0, 0.2);
-
-					double pullRadius = 12.0;
-					AABB vortexBox = new AABB(
-							center.x - pullRadius, center.y - 6.0, center.z - pullRadius,
-							center.x + pullRadius, center.y + 6.0, center.z + pullRadius
-					);
-
-					for (LivingEntity victim : bomb.level.getEntitiesOfClass(LivingEntity.class, vortexBox)) {
-						if (!victim.isAlive()) continue;
-
-						double dist = victim.position().distanceTo(center);
-						if (dist > pullRadius) continue;
-
-						if (victim != bomb.caster) {
-							victim.hurtServer(bomb.level, bomb.level.damageSources().magic(), 20.0F);
-						} else {
-							victim.fallDistance = 0.0F;
-						}
-
-						Vec3 pullVector = center.add(0, 0.8, 0).subtract(victim.position());
-						double pullStrength = Math.min(3.5, 1.25 + (dist * 0.22));
-						Vec3 pullVelocity = pullVector.normalize().scale(pullStrength);
-
-						victim.setDeltaMovement(pullVelocity.x, Math.max(0.55, pullVelocity.y + 0.45), pullVelocity.z);
-						victim.hurtMarked = true;
-					}
-
-					it.remove();
-				}
+			boolean wantsCast = mc.options.keyUse.isDown() && castCooldown == 0;
+			if (wantsCast) {
+				castCooldown = 12;
+				mc.player.swing(InteractionHand.MAIN_HAND);
 			}
 
-			if (mc.options.keyUse.isDown() && castCooldown == 0) {
-				castCooldown = 12;
+			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
+			if (server == null) return;
 
-				if (mc.getSingleplayerServer() != null) {
-					ServerPlayer serverPlayer = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
+			java.util.UUID playerId = mc.player.getUUID();
+			float xRot = mc.player.getXRot();
+			float yRot = mc.player.getYRot();
+			Vec3 look = mc.player.getLookAngle();
+			double spawnX = mc.player.getX() + look.x * 1.5;
+			double spawnY = mc.player.getEyeY() + look.y * 1.5;
+			double spawnZ = mc.player.getZ() + look.z * 1.5;
+			boolean shouldCast = wantsCast;
+
+			server.execute(() -> {
+				java.util.Iterator<TrackedWaterBomb> it = activeBombs.iterator();
+				while (it.hasNext()) {
+					TrackedWaterBomb bomb = it.next();
+
+					if (bomb.potion.isAlive() && !bomb.potion.isRemoved()) {
+						bomb.lastPos = bomb.potion.position();
+						bomb.level.sendParticles(ParticleTypes.SPLASH, bomb.lastPos.x, bomb.lastPos.y, bomb.lastPos.z, 4, 0.1, 0.1, 0.1, 0.05);
+						bomb.level.sendParticles(ParticleTypes.NAUTILUS, bomb.lastPos.x, bomb.lastPos.y, bomb.lastPos.z, 2, 0.1, 0.1, 0.1, 0.02);
+					} else {
+						Vec3 center = bomb.lastPos;
+
+						bomb.level.playSound(null, BlockPos.containing(center.x, center.y, center.z),
+								SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 1.8F, 0.85F);
+						bomb.level.playSound(null, BlockPos.containing(center.x, center.y, center.z),
+								SoundEvents.TRIDENT_THUNDER.value(), SoundSource.PLAYERS, 1.2F, 1.4F);
+
+						bomb.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, center.x, center.y + 0.5, center.z, 3, 1.2, 0.5, 1.2, 0.0);
+						bomb.level.sendParticles(ParticleTypes.SPLASH, center.x, center.y + 1.0, center.z, 80, 2.5, 1.5, 2.5, 0.3);
+						bomb.level.sendParticles(ParticleTypes.NAUTILUS, center.x, center.y + 1.0, center.z, 50, 2.0, 1.5, 2.0, 0.2);
+
+						double pullRadius = 12.0;
+						AABB vortexBox = new AABB(
+								center.x - pullRadius, center.y - 6.0, center.z - pullRadius,
+								center.x + pullRadius, center.y + 6.0, center.z + pullRadius
+						);
+
+						for (LivingEntity victim : bomb.level.getEntitiesOfClass(LivingEntity.class, vortexBox)) {
+							if (!victim.isAlive() || victim.isRemoved()) continue;
+
+							double dist = victim.position().distanceTo(center);
+							if (dist > pullRadius) continue;
+
+							if (!victim.getUUID().equals(bomb.casterId)) {
+								victim.hurtServer(bomb.level, bomb.level.damageSources().magic(), 20.0F);
+							} else {
+								victim.fallDistance = 0.0F;
+							}
+
+							Vec3 pullVector = center.add(0, 0.8, 0).subtract(victim.position());
+							double pullStrength = Math.min(3.5, 1.25 + (dist * 0.22));
+							Vec3 pullVelocity = pullVector.normalize().scale(pullStrength);
+
+							victim.setDeltaMovement(pullVelocity.x, Math.max(0.55, pullVelocity.y + 0.45), pullVelocity.z);
+							victim.hurtMarked = true;
+						}
+
+						it.remove();
+					}
+				}
+
+				if (shouldCast) {
+					ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
 					if (serverPlayer != null) {
 						ServerLevel serverLevel = serverPlayer.serverLevel();
-						Vec3 look = serverPlayer.getLookAngle();
 
 						ItemStack blueBottle = new ItemStack(Items.SPLASH_POTION);
 						ThrownPotion potionEntity = new ThrownPotion(serverLevel, serverPlayer, blueBottle);
 
-						potionEntity.setPos(
-								serverPlayer.getX() + look.x * 1.5,
-								serverPlayer.getEyeY() + look.y * 1.5,
-								serverPlayer.getZ() + look.z * 1.5
-						);
-
-						potionEntity.shootFromRotation(serverPlayer, serverPlayer.getXRot(), serverPlayer.getYRot(), -5.0F, 2.4F, 0.5F);
+						potionEntity.setPos(spawnX, spawnY, spawnZ);
+						potionEntity.shootFromRotation(serverPlayer, xRot, yRot, -5.0F, 2.4F, 0.5F);
 						serverLevel.addFreshEntity(potionEntity);
 
-						activeBombs.add(new TrackedWaterBomb(serverLevel, potionEntity, serverPlayer));
+						activeBombs.add(new TrackedWaterBomb(serverLevel, potionEntity, playerId));
 
 						serverLevel.playSound(null, serverPlayer.blockPosition(),
 								SoundEvents.SPLASH_POTION_THROW, SoundSource.PLAYERS, 1.0F, 0.8F);
 					}
 				}
-				mc.player.swing(InteractionHand.MAIN_HAND);
-			}
+			});
 		}
 	}
 
@@ -1795,81 +2223,103 @@ public class MyClient implements ModInitializer {
 				castCooldown--;
 			}
 
-			if (mc.getSingleplayerServer() != null && !edenArrows.isEmpty()) {
-				ServerPlayer serverPlayer = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-				if (serverPlayer != null) {
-					ServerLevel serverLevel = serverPlayer.serverLevel();
-					java.util.Iterator<java.util.UUID> it = edenArrows.iterator();
+			boolean wantsCast = mc.options.keyUse.isDown() && castCooldown == 0;
+			if (wantsCast) {
+				castCooldown = 9;
+				mc.player.swing(InteractionHand.MAIN_HAND);
+			}
 
+			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
+			if (server == null) return;
+
+			java.util.UUID playerId = mc.player.getUUID();
+			float baseXRot = mc.player.getXRot();
+			float baseYRot = mc.player.getYRot();
+			boolean shouldCast = wantsCast;
+
+			server.execute(() -> {
+				ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
+				if (serverPlayer == null) return;
+
+				ServerLevel serverLevel = serverPlayer.serverLevel();
+
+				if (!edenArrows.isEmpty()) {
+					java.util.Iterator<java.util.UUID> it = edenArrows.iterator();
 					while (it.hasNext()) {
 						java.util.UUID arrowId = it.next();
 						Entity entity = serverLevel.getEntity(arrowId);
 
-						if (entity instanceof Arrow arrow && arrow.isAlive() && !(arrow.getDeltaMovement().lengthSqr() == 0.0)) {
-							if (arrow.tickCount % 2 == 0) {
-								serverLevel.sendParticles(ParticleTypes.END_ROD, arrow.getX(), arrow.getY(), arrow.getZ(), 1, 0.0, 0.0, 0.0, 0.0);
-							}
-
-							AABB hitCheckBox = arrow.getBoundingBox().inflate(0.9);
-							for (LivingEntity target : serverLevel.getEntitiesOfClass(LivingEntity.class, hitCheckBox)) {
-								if (target == serverPlayer || !target.isAlive()) continue;
-
-								target.invulnerableTime = 0;
-
-								target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 100, 0));
-								target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 4));
-
-								Vec3 arrowDir = arrow.getDeltaMovement().normalize();
-								target.knockback(2.2, -arrowDir.x, -arrowDir.z);
-								target.hurtMarked = true;
-
-								serverLevel.sendParticles(ParticleTypes.ENCHANT, target.getX(), target.getEyeY(), target.getZ(), 20, 0.4, 0.5, 0.4, 0.2);
-							}
-						} else {
+						if (!(entity instanceof Arrow arrow) || !arrow.isAlive() || arrow.isRemoved()) {
 							it.remove();
+							continue;
+						}
+
+						if (arrow.onGround() || arrow.getDeltaMovement().lengthSqr() < 1.0E-4) {
+							arrow.discard();
+							it.remove();
+							continue;
+						}
+
+						if (arrow.tickCount % 2 == 0) {
+							serverLevel.sendParticles(ParticleTypes.END_ROD,
+									arrow.getX(), arrow.getY(), arrow.getZ(),
+									1, 0.0, 0.0, 0.0, 0.0);
+						}
+
+						java.util.Set<LivingEntity> hitTargets = new java.util.LinkedHashSet<>();
+						AABB hitCheckBox = arrow.getBoundingBox().inflate(0.9);
+						for (LivingEntity target : serverLevel.getEntitiesOfClass(LivingEntity.class, hitCheckBox)) {
+							if (target == serverPlayer || !target.isAlive() || target.isRemoved()) continue;
+							hitTargets.add(target);
+						}
+
+						Vec3 arrowDir = arrow.getDeltaMovement().normalize();
+						for (LivingEntity target : hitTargets) {
+							if (!target.isAlive() || target.isRemoved()) continue;
+
+							target.invulnerableTime = 0;
+							target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 100, 0));
+							target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 4));
+
+							target.knockback(2.2, -arrowDir.x, -arrowDir.z);
+							target.hurtMarked = true;
+
+							serverLevel.sendParticles(ParticleTypes.ENCHANT,
+									target.getX(), target.getEyeY(), target.getZ(),
+									20, 0.4, 0.5, 0.4, 0.2);
 						}
 					}
 				}
-			}
 
-			if (mc.options.keyUse.isDown() && castCooldown == 0) {
-				castCooldown = 9;
+				if (shouldCast) {
+					serverLevel.playSound(null, serverPlayer.blockPosition(),
+							SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0F, 1.8F);
+					serverLevel.playSound(null, serverPlayer.blockPosition(),
+							SoundEvents.FIREWORK_ROCKET_BLAST, SoundSource.PLAYERS, 1.2F, 1.2F);
 
-				if (mc.getSingleplayerServer() != null) {
-					ServerPlayer serverPlayer = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-					if (serverPlayer != null) {
-						ServerLevel serverLevel = serverPlayer.serverLevel();
+					for (int i = 0; i < 28; i++) {
+						Arrow shardArrow = new Arrow(serverLevel, serverPlayer, Items.ARROW.getDefaultInstance(), null);
 
-						serverLevel.playSound(null, serverPlayer.blockPosition(),
-								SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1.0F, 1.8F);
-						serverLevel.playSound(null, serverPlayer.blockPosition(),
-								SoundEvents.FIREWORK_ROCKET_BLAST, SoundSource.PLAYERS, 1.2F, 1.2F);
+						float yawOffset = (float) ((Math.random() - 0.5) * 24.0);
+						float pitchOffset = (float) ((Math.random() - 0.5) * 14.0);
 
-						for (int i = 0; i != 28; i++) {
-							Arrow shardArrow = new Arrow(serverLevel, serverPlayer, Items.ARROW.getDefaultInstance(), null);
+						shardArrow.shootFromRotation(
+								serverPlayer,
+								baseXRot + pitchOffset,
+								baseYRot + yawOffset,
+								0.0F,
+								3.5F,
+								1.0F
+						);
 
-							float yawOffset = (float) ((Math.random() - 0.5) * 24.0);
-							float pitchOffset = (float) ((Math.random() - 0.5) * 14.0);
+						shardArrow.setBaseDamage(180.0);
+						shardArrow.setCritArrow(true);
 
-							shardArrow.shootFromRotation(
-									serverPlayer,
-									serverPlayer.getXRot() + pitchOffset,
-									serverPlayer.getYRot() + yawOffset,
-									0.0F,
-									3.5F,
-									1.0F
-							);
-
-							shardArrow.setBaseDamage(180.0);
-							shardArrow.setCritArrow(true);
-
-							serverLevel.addFreshEntity(shardArrow);
-							edenArrows.add(shardArrow.getUUID());
-						}
+						serverLevel.addFreshEntity(shardArrow);
+						edenArrows.add(shardArrow.getUUID());
 					}
 				}
-				mc.player.swing(InteractionHand.MAIN_HAND);
-			}
+			});
 		}
 	}
 
@@ -1879,13 +2329,13 @@ public class MyClient implements ModInitializer {
 		private static class TrackedSnowball {
 			final ServerLevel level;
 			final net.minecraft.world.entity.projectile.Snowball snowball;
-			final ServerPlayer caster;
+			final java.util.UUID casterId;
 			Vec3 lastPos;
 
-			TrackedSnowball(ServerLevel level, net.minecraft.world.entity.projectile.Snowball snowball, ServerPlayer caster) {
+			TrackedSnowball(ServerLevel level, net.minecraft.world.entity.projectile.Snowball snowball, java.util.UUID casterId) {
 				this.level = level;
 				this.snowball = snowball;
-				this.caster = caster;
+				this.casterId = casterId;
 				this.lastPos = snowball.position();
 			}
 		}
@@ -1893,13 +2343,13 @@ public class MyClient implements ModInitializer {
 		private static class ActiveBlackHole {
 			final ServerLevel level;
 			final Vec3 center;
-			final ServerPlayer caster;
+			final java.util.UUID casterId;
 			int remainingTicks = 100;
 
-			ActiveBlackHole(ServerLevel level, Vec3 center, ServerPlayer caster) {
+			ActiveBlackHole(ServerLevel level, Vec3 center, java.util.UUID casterId) {
 				this.level = level;
 				this.center = center;
-				this.caster = caster;
+				this.casterId = casterId;
 			}
 		}
 
@@ -1919,104 +2369,111 @@ public class MyClient implements ModInitializer {
 				castCooldown--;
 			}
 
-			java.util.Iterator<TrackedSnowball> ballIt = flyingBalls.iterator();
-			while (ballIt.hasNext()) {
-				TrackedSnowball ball = ballIt.next();
-				if (ball.snowball.isAlive()) {
-					ball.lastPos = ball.snowball.position();
-					ball.level.sendParticles(ParticleTypes.PORTAL, ball.lastPos.x, ball.lastPos.y, ball.lastPos.z, 5, 0.1, 0.1, 0.1, 0.05);
-					ball.level.sendParticles(ParticleTypes.END_ROD, ball.lastPos.x, ball.lastPos.y, ball.lastPos.z, 1, 0.0, 0.0, 0.0, 0.0);
-				} else {
-					blackHoles.add(new ActiveBlackHole(ball.level, ball.lastPos, ball.caster));
-
-					ball.level.playSound(null, BlockPos.containing(ball.lastPos.x, ball.lastPos.y, ball.lastPos.z),
-							SoundEvents.END_PORTAL_SPAWN, SoundSource.PLAYERS, 1.5F, 1.4F);
-					ballIt.remove();
-				}
+			boolean wantsCast = mc.options.keyUse.isDown() && castCooldown == 0;
+			if (wantsCast) {
+				castCooldown = 20;
+				mc.player.swing(InteractionHand.MAIN_HAND);
 			}
 
-			java.util.Iterator<ActiveBlackHole> holeIt = blackHoles.iterator();
-			while (holeIt.hasNext()) {
-				ActiveBlackHole hole = holeIt.next();
-				hole.remainingTicks--;
+			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
+			if (server == null) return;
 
-				Vec3 c = hole.center;
-				double singularityRadius = 16.0;
+			java.util.UUID playerId = mc.player.getUUID();
+			float xRot = mc.player.getXRot();
+			float yRot = mc.player.getYRot();
+			Vec3 look = mc.player.getLookAngle();
+			double spawnX = mc.player.getX() + look.x * 1.5;
+			double spawnY = mc.player.getEyeY() + look.y * 1.5;
+			double spawnZ = mc.player.getZ() + look.z * 1.5;
 
-				hole.level.sendParticles(ParticleTypes.SQUID_INK, c.x, c.y + 1.2, c.z, 12, 0.8, 0.8, 0.8, 0.02);
-				hole.level.sendParticles(ParticleTypes.PORTAL, c.x, c.y + 1.2, c.z, 35, 3.5, 2.0, 3.5, 0.5);
-
-				if (hole.remainingTicks % 5 == 0) {
-					hole.level.playSound(null, BlockPos.containing(c.x, c.y, c.z),
-							SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 1.4F, 0.75F);
-
-					double ox = (Math.random() - 0.5) * 3.0;
-					double oz = (Math.random() - 0.5) * 3.0;
-					hole.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, c.x + ox, c.y + 1.0, c.z + oz, 2, 0.8, 0.5, 0.8, 0.0);
-				}
-
-				AABB gravityBox = new AABB(
-						c.x - singularityRadius, c.y - 8.0, c.z - singularityRadius,
-						c.x + singularityRadius, c.y + 8.0, c.z + singularityRadius
-				);
-
-				for (LivingEntity victim : hole.level.getEntitiesOfClass(LivingEntity.class, gravityBox)) {
-					if (!victim.isAlive()) continue;
-
-					double dist = victim.position().distanceTo(c);
-					if (dist > singularityRadius) continue;
-
-					Vec3 pullDir = c.add(0, 1.0, 0).subtract(victim.position());
-					double pullSpeed = Math.min(1.6, 0.45 + (dist * 0.08));
-					Vec3 pullVel = pullDir.normalize().scale(pullSpeed);
-
-					victim.setDeltaMovement(pullVel.x, pullVel.y + 0.08, pullVel.z);
-					victim.hurtMarked = true;
-
-					if (victim != hole.caster) {
-						if (hole.remainingTicks % 5 == 0) {
-							victim.invulnerableTime = 0;
-							victim.hurtServer(hole.level, hole.level.damageSources().magic(), 5.0F);
-						}
+			server.execute(() -> {
+				java.util.Iterator<TrackedSnowball> ballIt = flyingBalls.iterator();
+				while (ballIt.hasNext()) {
+					TrackedSnowball ball = ballIt.next();
+					if (ball.snowball.isAlive() && !ball.snowball.isRemoved()) {
+						ball.lastPos = ball.snowball.position();
+						ball.level.sendParticles(ParticleTypes.PORTAL, ball.lastPos.x, ball.lastPos.y, ball.lastPos.z, 5, 0.1, 0.1, 0.1, 0.05);
+						ball.level.sendParticles(ParticleTypes.END_ROD, ball.lastPos.x, ball.lastPos.y, ball.lastPos.z, 1, 0.0, 0.0, 0.0, 0.0);
 					} else {
-						victim.fallDistance = 0.0F;
+						blackHoles.add(new ActiveBlackHole(ball.level, ball.lastPos, ball.casterId));
+
+						ball.level.playSound(null, BlockPos.containing(ball.lastPos.x, ball.lastPos.y, ball.lastPos.z),
+								SoundEvents.END_PORTAL_SPAWN, SoundSource.PLAYERS, 1.5F, 1.4F);
+						ballIt.remove();
 					}
 				}
 
-				if (hole.remainingTicks == 0) {
-					holeIt.remove();
+				java.util.Iterator<ActiveBlackHole> holeIt = blackHoles.iterator();
+				while (holeIt.hasNext()) {
+					ActiveBlackHole hole = holeIt.next();
+					hole.remainingTicks--;
+
+					Vec3 c = hole.center;
+					double singularityRadius = 16.0;
+
+					hole.level.sendParticles(ParticleTypes.SQUID_INK, c.x, c.y + 1.2, c.z, 12, 0.8, 0.8, 0.8, 0.02);
+					hole.level.sendParticles(ParticleTypes.PORTAL, c.x, c.y + 1.2, c.z, 35, 3.5, 2.0, 3.5, 0.5);
+
+					if (hole.remainingTicks % 5 == 0) {
+						hole.level.playSound(null, BlockPos.containing(c.x, c.y, c.z),
+								SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 1.4F, 0.75F);
+
+						double ox = (Math.random() - 0.5) * 3.0;
+						double oz = (Math.random() - 0.5) * 3.0;
+						hole.level.sendParticles(ParticleTypes.EXPLOSION_EMITTER, c.x + ox, c.y + 1.0, c.z + oz, 2, 0.8, 0.5, 0.8, 0.0);
+					}
+
+					AABB gravityBox = new AABB(
+							c.x - singularityRadius, c.y - 8.0, c.z - singularityRadius,
+							c.x + singularityRadius, c.y + 8.0, c.z + singularityRadius
+					);
+
+					for (LivingEntity victim : hole.level.getEntitiesOfClass(LivingEntity.class, gravityBox)) {
+						if (!victim.isAlive() || victim.isRemoved()) continue;
+
+						double dist = victim.position().distanceTo(c);
+						if (dist > singularityRadius) continue;
+
+						Vec3 pullDir = c.add(0, 1.0, 0).subtract(victim.position());
+						double pullSpeed = Math.min(1.6, 0.45 + (dist * 0.08));
+						Vec3 pullVel = pullDir.normalize().scale(pullSpeed);
+
+						victim.setDeltaMovement(pullVel.x, pullVel.y + 0.08, pullVel.z);
+						victim.hurtMarked = true;
+
+						if (!victim.getUUID().equals(hole.casterId)) {
+							if (hole.remainingTicks % 5 == 0) {
+								victim.invulnerableTime = 0;
+								victim.hurtServer(hole.level, hole.level.damageSources().magic(), 5.0F);
+							}
+						} else {
+							victim.fallDistance = 0.0F;
+						}
+					}
+
+					if (hole.remainingTicks <= 0) {
+						holeIt.remove();
+					}
 				}
-			}
 
-			if (mc.options.keyUse.isDown() && castCooldown == 0) {
-				castCooldown = 20;
-
-				if (mc.getSingleplayerServer() != null) {
-					ServerPlayer serverPlayer = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
+				if (wantsCast) {
+					ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
 					if (serverPlayer != null) {
 						ServerLevel serverLevel = serverPlayer.serverLevel();
-						Vec3 look = serverPlayer.getLookAngle();
-
 						net.minecraft.world.entity.projectile.Snowball snowball =
 								new net.minecraft.world.entity.projectile.Snowball(serverLevel, serverPlayer, Items.SNOWBALL.getDefaultInstance());
 
-						snowball.setPos(
-								serverPlayer.getX() + look.x * 1.5,
-								serverPlayer.getEyeY() + look.y * 1.5,
-								serverPlayer.getZ() + look.z * 1.5
-						);
-
-						snowball.shootFromRotation(serverPlayer, serverPlayer.getXRot(), serverPlayer.getYRot(), 0.0F, 2.6F, 0.2F);
+						snowball.setPos(spawnX, spawnY, spawnZ);
+						snowball.shootFromRotation(serverPlayer, xRot, yRot, 0.0F, 2.6F, 0.2F);
 						serverLevel.addFreshEntity(snowball);
 
-						flyingBalls.add(new TrackedSnowball(serverLevel, snowball, serverPlayer));
+						flyingBalls.add(new TrackedSnowball(serverLevel, snowball, playerId));
 
 						serverLevel.playSound(null, serverPlayer.blockPosition(),
 								SoundEvents.SNOWBALL_THROW, SoundSource.PLAYERS, 1.0F, 0.5F);
 					}
 				}
-				mc.player.swing(InteractionHand.MAIN_HAND);
-			}
+			});
 		}
 	}
 
@@ -2292,6 +2749,158 @@ public class MyClient implements ModInitializer {
 					}
 				}
 			}
+		}
+	}
+
+	public static class MultiBuilderModule extends Module {
+		public enum BuildMode {
+			WALL("Wall"),
+			BRIDGE("Bridge");
+
+			public final String label;
+			BuildMode(String label) { this.label = label; }
+		}
+
+		private BuildMode mode = BuildMode.WALL;
+
+		public MultiBuilderModule() {
+			super("MultiBuilder", Category.MISC, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		public BuildMode getMode() {
+			return mode;
+		}
+
+		public void cycleMode() {
+			this.mode = (this.mode == BuildMode.WALL) ? BuildMode.BRIDGE : BuildMode.WALL;
+		}
+
+		@Override
+		public String getDisplayLabel() {
+			return getName() + " §7[" + mode.label + "]";
+		}
+	}
+
+	public static class MegaExtinguisherModule extends Module {
+		public MegaExtinguisherModule() {
+			super("MegaExtinguisher", Category.MISC, GLFW.GLFW_KEY_UNKNOWN);
+		}
+	}
+
+	public static class AvadaKedavraModule extends Module {
+		private int castCooldown = 0;
+
+		public AvadaKedavraModule() {
+			super("AvadaKedavra", Category.DARK_MAGIC, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) return;
+
+			if (castCooldown > 0) {
+				castCooldown--;
+			}
+
+			boolean wantsCast = mc.options.keyUse.isDown() && castCooldown == 0;
+			if (!wantsCast) return;
+
+			castCooldown = 18;
+			mc.player.swing(InteractionHand.MAIN_HAND);
+
+			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
+			if (server == null) return;
+
+			java.util.UUID playerId = mc.player.getUUID();
+			Vec3 eyePos = mc.player.getEyePosition();
+			Vec3 look = mc.player.getLookAngle().normalize();
+
+			server.execute(() -> {
+				ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
+				if (serverPlayer == null) return;
+
+				ServerLevel serverLevel = serverPlayer.serverLevel();
+				double maxRange = 45.0;
+				double stepSize = 0.5;
+				int steps = (int) (maxRange / stepSize);
+
+				net.minecraft.core.particles.DustParticleOptions greenBolt =
+						new net.minecraft.core.particles.DustParticleOptions(0x00FF44, 1.5F);
+
+				serverLevel.playSound(null, serverPlayer.blockPosition(),
+						SoundEvents.ILLUSIONER_CAST_SPELL, SoundSource.PLAYERS, 1.2F, 0.7F);
+
+				Vec3 hitPoint = null;
+				LivingEntity hitTarget = null;
+
+				for (int i = 2; i <= steps; i++) {
+					double dist = i * stepSize;
+					Vec3 point = eyePos.add(look.scale(dist));
+					BlockPos blockPos = BlockPos.containing(point.x, point.y, point.z);
+
+					BlockState state = serverLevel.getBlockState(blockPos);
+					if (!state.isAir() && state.isSolidRender()) {
+						hitPoint = point;
+						break;
+					}
+
+					serverLevel.sendParticles(greenBolt, point.x, point.y, point.z, 3, 0.06, 0.06, 0.06, 0.0);
+					if (i % 3 == 0) {
+						serverLevel.sendParticles(ParticleTypes.HAPPY_VILLAGER, point.x, point.y, point.z, 1, 0.05, 0.05, 0.05, 0.0);
+					}
+
+					AABB checkBox = new AABB(
+							point.x - 0.55, point.y - 0.55, point.z - 0.55,
+							point.x + 0.55, point.y + 0.55, point.z + 0.55
+					);
+
+					LivingEntity found = null;
+					double closestDist = Double.MAX_VALUE;
+					for (LivingEntity candidate : serverLevel.getEntitiesOfClass(LivingEntity.class, checkBox)) {
+						if (candidate == serverPlayer || !candidate.isAlive() || candidate.isRemoved()) continue;
+						double d = candidate.position().distanceToSqr(eyePos);
+						if (d < closestDist) {
+							closestDist = d;
+							found = candidate;
+						}
+					}
+
+					if (found != null) {
+						hitTarget = found;
+						hitPoint = found.position().add(0, found.getBbHeight() * 0.5, 0);
+						break;
+					}
+				}
+
+				if (hitPoint == null) {
+					hitPoint = eyePos.add(look.scale(maxRange));
+				}
+
+				if (hitTarget != null) {
+					net.minecraft.world.entity.LightningBolt visualBolt =
+							new net.minecraft.world.entity.LightningBolt(net.minecraft.world.entity.EntityType.LIGHTNING_BOLT, serverLevel);
+					visualBolt.setPos(hitTarget.getX(), hitTarget.getY(), hitTarget.getZ());
+					visualBolt.setVisualOnly(true);
+					serverLevel.addFreshEntity(visualBolt);
+
+					serverLevel.sendParticles(greenBolt, hitPoint.x, hitPoint.y, hitPoint.z, 35, 0.5, 0.6, 0.5, 0.15);
+					serverLevel.sendParticles(ParticleTypes.FLASH, hitPoint.x, hitPoint.y, hitPoint.z, 1, 0.0, 0.0, 0.0, 0.0);
+
+					hitTarget.hurtServer(serverLevel, serverLevel.damageSources().magic(), 999999.0F);
+					if (hitTarget.isAlive() && !hitTarget.isRemoved()) {
+						hitTarget.kill(serverLevel);
+					}
+				} else {
+					serverLevel.sendParticles(greenBolt, hitPoint.x, hitPoint.y, hitPoint.z, 10, 0.25, 0.25, 0.25, 0.05);
+				}
+			});
+		}
+	}
+
+	public static class WaterVisionModule extends Module {
+		public WaterVisionModule() {
+			super("WaterVision", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
 		}
 	}
 }
