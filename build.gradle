@@ -69,3 +69,14 @@ publishing {
 		// retrieving dependencies.
 	}
 }
+
+loom {
+	runs {
+		client2 {
+			inherit client
+			runDirectory = "run2"
+			programArgs "--username", "Player2"
+		}
+	}
+}
+

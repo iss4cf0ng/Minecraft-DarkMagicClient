@@ -3,14 +3,18 @@
 	"package": "com.myclient.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
+	],
+	"client": [
 		"ExampleMixin",
 		"BlockMixin",
 		"NametagMixin",
-		"PlayerMixin",
 		"LightTextureMixin",
+		"WaterVisionMixin",
+		"LocalPlayerNoFallMixin",
 		"PacketMixin",
+		"PlayerMixin",
 		"LiquidBlockMixin",
-		"WaterVisionMixin"
+		"SafeWalkMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

@@ -4,6 +4,11 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.minecraft.client.gui.GuiGraphics;
 
 public abstract class Module {
+    public enum Scope {
+        SERVER,
+        SINGLE
+    }
+
     public enum Category {
         COMBAT("Combat"),
         RENDER("Render"),
@@ -34,6 +39,10 @@ public abstract class Module {
     public void onTick() {}
     public void onRender3D(WorldRenderContext context) {}
     public void onRender2D(GuiGraphics guiGraphics) {}
+
+    public Scope getScope() {
+        return Scope.SERVER;
+    }
 
     public String getName() { return name; }
     public Category getCategory() { return category; }

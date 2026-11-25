@@ -1,5 +1,7 @@
 package com.myclient;
 
+import com.myclient.mixin.SafeWalkMixin;
+import net.fabricmc.api.ClientModInitializer;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -80,7 +82,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 
-public class MyClient implements ModInitializer {
+public class MyClient implements ClientModInitializer {
 	public static final String MOD_ID = "myclient";
 	public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
@@ -113,7 +115,7 @@ public class MyClient implements ModInitializer {
 	}
 
 	@Override
-	public void onInitialize() {
+	public void onInitializeClient() {
 		LOGGER.info("Initializing...");
 
 		// Modules
@@ -162,6 +164,8 @@ public class MyClient implements ModInitializer {
 		modules.add(new MegaExtinguisherModule());
 		modules.add(new AvadaKedavraModule());
 		modules.add(new WaterVisionModule());
+		modules.add(new JetPackModule());
+		modules.add(new SafeWalkModule());
 
 		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
 			if (!world.isClientSide() && isModuleEnabled("MegaExtinguisher")) {
@@ -414,7 +418,7 @@ public class MyClient implements ModInitializer {
 			Minecraft mc = Minecraft.getInstance();
 			if (mc.player == null || mc.level == null) return;
 
-			guiGraphics.drawString(mc.font, "§b§SuperCraft §7v1.0 §f[Press Right-Shift to open menu]", 10, 10, 0xFFFFFF);
+			guiGraphics.drawString(mc.font, "§b§ ProHacker §7v1.0 §f[Press Right-Shift to open menu]", 10, 10, 0xFFFFFF);
 
 			int yOffset = 24;
 			for (Module m : modules) {
@@ -1013,7 +1017,7 @@ public class MyClient implements ModInitializer {
 
 	public static class FireballCannonModule extends Module {
 		public FireballCannonModule() {
-			super("FireballCannon", Category.MISC, GLFW.GLFW_KEY_UNKNOWN);
+			super("FireballCannon", Category.GRIEFING, GLFW.GLFW_KEY_UNKNOWN);
 		}
 
 		@Override
@@ -1053,7 +1057,7 @@ public class MyClient implements ModInitializer {
 
 	public static class WitherBarrageModule extends Module {
 		public WitherBarrageModule() {
-			super("WitherBarrage", Category.MISC, GLFW.GLFW_KEY_UNKNOWN);
+			super("WitherBarrage", Category.GRIEFING, GLFW.GLFW_KEY_UNKNOWN);
 		}
 
 		@Override
@@ -1091,8 +1095,55 @@ public class MyClient implements ModInitializer {
 	}
 
 	public static class MinimapModule extends Module {
+		public enum Mode {
+			RADAR("Radar"),
+			TERRAIN("Terrain");
+
+			public final String label;
+			Mode(String label) { this.label = label; }
+		}
+
+		private Mode mode = Mode.RADAR;
+
+		private static final int MAP_SIZE = 90;
+		private static final int CELL_SIZE = 2;
+		private static final double WORLD_SCALE = 0.55;
+
 		public MinimapModule() {
 			super("Minimap", Category.RENDER, GLFW.GLFW_KEY_M);
+		}
+
+		public void cycleMode() {
+			mode = (mode == Mode.RADAR) ? Mode.TERRAIN : Mode.RADAR;
+		}
+
+		public Mode getMode() {
+			return mode;
+		}
+
+		@Override
+		public String getDisplayLabel() {
+			return getName() + " [" + mode.label + "]";
+		}
+
+		private int sampleTerrainColor(net.minecraft.world.level.Level level, int worldX, int centerY, int worldZ) {
+			int surfaceY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, worldX, worldZ) - 1;
+			net.minecraft.core.BlockPos pos = new net.minecraft.core.BlockPos(worldX, surfaceY, worldZ);
+			net.minecraft.world.level.block.state.BlockState state = level.getBlockState(pos);
+
+			int baseColor = state.getMapColor(level, pos).col;
+			if (baseColor == 0) {
+				baseColor = 0x18222C;
+			}
+
+			int heightDiff = surfaceY - centerY;
+			float shade = 1.0F + Math.max(-0.28F, Math.min(0.28F, heightDiff * 0.025F));
+
+			int r = (int) Math.min(255, Math.max(0, ((baseColor >> 16) & 0xFF) * shade));
+			int g = (int) Math.min(255, Math.max(0, ((baseColor >> 8) & 0xFF) * shade));
+			int b = (int) Math.min(255, Math.max(0, (baseColor & 0xFF) * shade));
+
+			return 0xFF000000 | (r << 16) | (g << 8) | b;
 		}
 
 		@Override
@@ -1101,26 +1152,50 @@ public class MyClient implements ModInitializer {
 			if (mc.player == null || mc.level == null) return;
 
 			int screenWidth = mc.getWindow().getGuiScaledWidth();
-			int mapSize = 90;
-			int mapX = screenWidth - mapSize - 10;
+			int mapX = screenWidth - MAP_SIZE - 10;
 			int mapY = 10;
-			int centerX = mapX + mapSize / 2;
-			int centerY = mapY + mapSize / 2;
-
-			g.fill(mapX, mapY, mapX + mapSize, mapY + mapSize, 0xAA0A141E);
-			g.fill(mapX, mapY, mapX + mapSize, mapY + 1, 0xFF00FFFF);
-			g.fill(mapX, mapY + mapSize - 1, mapX + mapSize, mapY + mapSize, 0xFF00FFFF);
-			g.fill(mapX, mapY, mapX + 1, mapY + mapSize, 0xFF00FFFF);
-			g.fill(mapX + mapSize - 1, mapY, mapX + mapSize, mapY + mapSize, 0xFF00FFFF);
-
-			g.fill(centerX, mapY + 2, centerX + 1, mapY + mapSize - 2, 0x33FFFFFF);
-			g.fill(mapX + 2, centerY, mapX + mapSize - 2, centerY + 1, 0x33FFFFFF);
+			int centerX = mapX + MAP_SIZE / 2;
+			int centerY = mapY + MAP_SIZE / 2;
 
 			double yawRad = Math.toRadians(mc.player.getYRot());
 			double cos = Math.cos(yawRad);
 			double sin = Math.sin(yawRad);
-			double scale = 1.1;
 
+			if (mode == Mode.TERRAIN) {
+				int px0 = mc.player.getBlockX();
+				int py0 = mc.player.getBlockY();
+				int pz0 = mc.player.getBlockZ();
+				int half = MAP_SIZE / 2;
+
+				double fwdX = -Math.sin(yawRad);
+				double fwdZ = Math.cos(yawRad);
+				double rightX = -fwdZ;
+				double rightZ = fwdX;
+
+				for (int sy = -half; sy < half; sy += CELL_SIZE) {
+					for (int sx = -half; sx < half; sx += CELL_SIZE) {
+						double relX = (rightX * sx - fwdX * sy) * WORLD_SCALE;
+						double relZ = (rightZ * sx - fwdZ * sy) * WORLD_SCALE;
+
+						int sampleX = px0 + (int) Math.round(relX);
+						int sampleZ = pz0 + (int) Math.round(relZ);
+
+						int color = sampleTerrainColor(mc.level, sampleX, py0, sampleZ);
+						g.fill(centerX + sx, centerY + sy, centerX + sx + CELL_SIZE, centerY + sy + CELL_SIZE, color);
+					}
+				}
+			} else {
+				g.fill(mapX, mapY, mapX + MAP_SIZE, mapY + MAP_SIZE, 0xAA0A141E);
+				g.fill(centerX, mapY + 2, centerX + 1, mapY + MAP_SIZE - 2, 0x33FFFFFF);
+				g.fill(mapX + 2, centerY, mapX + MAP_SIZE - 2, centerY + 1, 0x33FFFFFF);
+			}
+
+			g.fill(mapX, mapY, mapX + MAP_SIZE, mapY + 1, 0xFF00FFFF);
+			g.fill(mapX, mapY + MAP_SIZE - 1, mapX + MAP_SIZE, mapY + MAP_SIZE, 0xFF00FFFF);
+			g.fill(mapX, mapY, mapX + 1, mapY + MAP_SIZE, 0xFF00FFFF);
+			g.fill(mapX + MAP_SIZE - 1, mapY, mapX + MAP_SIZE, mapY + MAP_SIZE, 0xFF00FFFF);
+
+			double scale = 1.1;
 			for (Entity entity : mc.level.entitiesForRendering()) {
 				if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
 				if (!living.isAlive()) continue;
@@ -1131,7 +1206,7 @@ public class MyClient implements ModInitializer {
 				double rotX = -(dx * cos + dz * sin) * scale;
 				double rotY = (dx * sin - dz * cos) * scale;
 
-				int maxOffset = (mapSize / 2) - 4;
+				int maxOffset = (MAP_SIZE / 2) - 4;
 				if (Math.abs(rotX) > maxOffset || Math.abs(rotY) > maxOffset) continue;
 
 				int dotX = (int) (centerX + rotX);
@@ -1141,8 +1216,22 @@ public class MyClient implements ModInitializer {
 				g.fill(dotX - 1, dotY - 1, dotX + 2, dotY + 2, dotColor);
 			}
 
+			double northDx = 0.0;
+			double northDz = -1.0;
+			double northRotX = -(northDx * cos + northDz * sin);
+			double northRotY = (northDx * sin - northDz * cos);
+			double northLen = Math.hypot(northRotX, northRotY);
+			if (northLen > 1.0e-5) {
+				northRotX /= northLen;
+				northRotY /= northLen;
+			}
+			int compassRadius = (MAP_SIZE / 2) - 8;
+			int nX = (int) (centerX + northRotX * compassRadius);
+			int nY = (int) (centerY + northRotY * compassRadius);
+			g.drawCenteredString(mc.font, "§bN", nX, nY - mc.font.lineHeight / 2, 0xFFFFFF);
+
 			g.fill(centerX - 2, centerY - 2, centerX + 2, centerY + 2, 0xFF00FFFF);
-			g.drawCenteredString(mc.font, "§bN", centerX, mapY + mapSize + 3, 0xFFFFFF);
+			g.drawCenteredString(mc.font, "§7[" + mode.label + "]", centerX, mapY + MAP_SIZE + 3, 0xFFFFFF);
 		}
 	}
 
@@ -1432,34 +1521,26 @@ public class MyClient implements ModInitializer {
 		}
 	}
 
+	public static boolean isNoFallEnabled() {
+		return NoFallModule.instance != null && NoFallModule.instance.isEnabled();
+	}
+
 	public static class NoFallModule extends Module {
+		public static NoFallModule instance;
+
 		public NoFallModule() {
 			super("NoFall", Category.MOVEMENT, GLFW.GLFW_KEY_UNKNOWN);
+			instance = this;
 		}
 
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.getConnection() == null) return;
+			if (mc.player == null) return;
+			if (mc.player.isFallFlying() || mc.player.isCreative() || mc.player.isSpectator()) return;
 
-			if (mc.player.fallDistance > 2.0F) {
-				mc.getConnection().send(new ServerboundMovePlayerPacket.StatusOnly(
-						true,
-						mc.player.horizontalCollision
-				));
-
+			if (!mc.player.onGround() && mc.player.getDeltaMovement().y < -0.08) {
 				mc.player.fallDistance = 0.0F;
-
-				net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
-				if (server != null) {
-					java.util.UUID playerId = mc.player.getUUID();
-					server.execute(() -> {
-						ServerPlayer sp = server.getPlayerList().getPlayer(playerId);
-						if (sp != null) {
-							sp.fallDistance = 0.0F;
-						}
-					});
-				}
 			}
 		}
 	}
@@ -1775,6 +1856,11 @@ public class MyClient implements ModInitializer {
 		}
 
 		@Override
+		public Scope getScope() {
+			return Scope.SINGLE;
+		}
+
+		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
 			if (mc.player == null || mc.level == null) return;
@@ -1852,6 +1938,11 @@ public class MyClient implements ModInitializer {
 
 		public CurseKillModule() {
 			super("CurseKill", Category.DARK_MAGIC, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public Scope getScope() {
+			return Scope.SINGLE;
 		}
 
 		@Override
@@ -1954,6 +2045,11 @@ public class MyClient implements ModInitializer {
 
 		public CurseRoarModule() {
 			super("CurseRoar", Category.DARK_MAGIC, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public Scope getScope() {
+			return Scope.SINGLE;
 		}
 
 		@Override
@@ -2106,6 +2202,11 @@ public class MyClient implements ModInitializer {
 		}
 
 		@Override
+		public Scope getScope() {
+			return Scope.SINGLE;
+		}
+
+		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
 			if (mc.player == null || mc.level == null) return;
@@ -2212,6 +2313,11 @@ public class MyClient implements ModInitializer {
 
 		public EdenShardModule() {
 			super("EdenShard", Category.DARK_MAGIC, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public Scope getScope() {
+			return Scope.SINGLE;
 		}
 
 		@Override
@@ -2338,6 +2444,11 @@ public class MyClient implements ModInitializer {
 				this.casterId = casterId;
 				this.lastPos = snowball.position();
 			}
+		}
+
+		@Override
+		public Scope getScope() {
+			return Scope.SINGLE;
 		}
 
 		private static class ActiveBlackHole {
@@ -2795,6 +2906,11 @@ public class MyClient implements ModInitializer {
 		}
 
 		@Override
+		public Scope getScope() {
+			return Scope.SINGLE;
+		}
+
+		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
 			if (mc.player == null || mc.level == null) return;
@@ -2901,6 +3017,38 @@ public class MyClient implements ModInitializer {
 	public static class WaterVisionModule extends Module {
 		public WaterVisionModule() {
 			super("WaterVision", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+	}
+
+	public static class JetPackModule extends Module {
+		private static final double UPWARD_SPEED = 0.42;
+
+		public JetPackModule() {
+			super("JetPack", Category.MOVEMENT, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) return;
+
+			if (mc.options.keyJump.isDown()) {
+				Vec3 vel = mc.player.getDeltaMovement();
+				double nextY = Math.max(vel.y + 0.12, UPWARD_SPEED);
+				if (nextY > UPWARD_SPEED) {
+					nextY = UPWARD_SPEED;
+				}
+				mc.player.setDeltaMovement(vel.x, nextY, vel.z);
+				mc.player.fallDistance = 0.0F;
+			} else if (!mc.player.onGround()) {
+				mc.player.fallDistance = 0.0F;
+			}
+		}
+	}
+
+	public static class SafeWalkModule extends Module {
+		public SafeWalkModule() {
+			super("SafeWalk", Category.MOVEMENT, GLFW.GLFW_KEY_UNKNOWN);
 		}
 	}
 }
