@@ -1182,26 +1182,6 @@ public class MyClient implements ClientModInitializer {
 			}
 
 			if (mc.player.isUsingItem() && mc.player.getUseItem().getItem() instanceof BowItem) {
-				if (mc.getSingleplayerServer() != null) {
-					fireTimer++;
-					if (fireTimer >= 2) {
-						fireTimer = 0;
-						ServerPlayer sp = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-						if (sp != null) {
-							ServerLevel level = sp.serverLevel();
-							Arrow arrow = new Arrow(level, sp, Items.ARROW.getDefaultInstance(), null);
-							arrow.shootFromRotation(sp, sp.getXRot(), sp.getYRot(), 0.0F, 3.2F, 1.5F);
-							arrow.setCritArrow(true);
-							level.addFreshEntity(arrow);
-						}
-					}
-				} else {
-					if (mc.player.getTicksUsingItem() >= 4) {
-						mc.gameMode.releaseUsingItem(mc.player);
-						mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND);
-					}
-				}
-			} else {
 				fireTimer = 0;
 			}
 		}
