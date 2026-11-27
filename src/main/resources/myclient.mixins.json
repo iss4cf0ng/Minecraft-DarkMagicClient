@@ -14,7 +14,12 @@
 		"PacketMixin",
 		"PlayerMixin",
 		"LiquidBlockMixin",
-		"SafeWalkMixin"
+		"SafeWalkMixin",
+		"ClientLevelTimeMixin",
+		"LevelWeatherMixin",
+		"NoBlindMixin",
+
+		"CameraMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

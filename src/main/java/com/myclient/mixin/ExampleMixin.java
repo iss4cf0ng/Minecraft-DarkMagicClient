@@ -16,7 +16,9 @@ public class ExampleMixin {
 
 	@Inject(method = "isCurrentlyGlowing", at = @At("HEAD"), cancellable = true)
 	private void onIsCurrentlyGlowing(CallbackInfoReturnable<Boolean> cir) {
-		if (!MyClient.isModuleEnabled("GlowESP")) return;
+		if (!MyClient.isModuleEnabled("GlowESP")) {
+			return;
+		}
 
 		Entity self = (Entity) (Object) this;
 		Minecraft mc = Minecraft.getInstance();
@@ -28,7 +30,9 @@ public class ExampleMixin {
 
 	@Inject(method = "getDisplayName", at = @At("HEAD"), cancellable = true)
 	private void onGetDisplayName(CallbackInfoReturnable<Component> cir) {
-		if (!MyClient.isModuleEnabled("NameSpoofer")) return;
+		if (!MyClient.isModuleEnabled("NameSpoofer")) {
+			return;
+		}
 
 		Entity self = (Entity) (Object) this;
 		Minecraft mc = Minecraft.getInstance();

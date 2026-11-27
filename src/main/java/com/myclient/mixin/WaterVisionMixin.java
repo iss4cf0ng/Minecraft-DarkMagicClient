@@ -34,6 +34,7 @@ public class WaterVisionMixin {
                 return updated;
             }
         }
+
         return fog;
     }
 
@@ -60,11 +61,14 @@ public class WaterVisionMixin {
                         && params[5] == float.class
                         && params[6] == float.class) {
                     ctor.setAccessible(true);
+
                     return (FogParameters) ctor.newInstance(newStart, newEnd, newShape, red, green, blue, newAlpha);
                 }
             }
         } catch (ReflectiveOperationException ignored) {
+
         }
+
         return null;
     }
 
@@ -77,7 +81,9 @@ public class WaterVisionMixin {
                 return f;
             }
         } catch (ReflectiveOperationException ignored) {
+
         }
+
         return fallback;
     }
 }

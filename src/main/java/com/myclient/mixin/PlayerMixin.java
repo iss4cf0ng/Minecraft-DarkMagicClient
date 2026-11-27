@@ -14,7 +14,9 @@ public class PlayerMixin {
 
     @Inject(method = "getDisplayName", at = @At("HEAD"), cancellable = true)
     private void onPlayerGetDisplayName(CallbackInfoReturnable<Component> cir) {
-        if (!MyClient.isModuleEnabled("NameSpoofer")) return;
+        if (!MyClient.isModuleEnabled("NameSpoofer")) {
+            return;
+        }
 
         Player self = (Player) (Object) this;
         Minecraft mc = Minecraft.getInstance();

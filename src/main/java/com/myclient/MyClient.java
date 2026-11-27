@@ -1,3 +1,5 @@
+// oh shit
+
 package com.myclient;
 
 import com.myclient.mixin.SafeWalkMixin;
@@ -24,6 +26,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
@@ -80,7 +84,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+
+import static net.minecraft.world.level.block.Blocks.AIR;
 
 public class MyClient implements ClientModInitializer {
 	public static final String MOD_ID = "myclient";
@@ -95,6 +103,7 @@ public class MyClient implements ClientModInitializer {
 				return m.isEnabled();
 			}
 		}
+
 		return false;
 	}
 
@@ -166,6 +175,25 @@ public class MyClient implements ClientModInitializer {
 		modules.add(new WaterVisionModule());
 		modules.add(new JetPackModule());
 		modules.add(new SafeWalkModule());
+		modules.add(new DayModule());
+		modules.add(new NoBlindModule());
+		modules.add(new NoWeatherModule());
+		modules.add(new DodgeModule());
+		modules.add(new ChestEspModule());
+		modules.add(new PlayerEspModule());
+		modules.add(new MobEspModule());
+		modules.add(new SpawnerEspModule());
+		modules.add(new AntiHurtcamModule());
+		modules.add(new AntiKnockbackModule());
+		modules.add(new KnockbackModule());
+		modules.add(new CriticalModule());
+		modules.add(new FreecamModule());
+		modules.add(new SpectateModule());
+		modules.add(new NoClipModule());
+		modules.add(new NoSlowModule());
+		modules.add(new NoDizzyModule());
+		modules.add(new NoSlipModule());
+		modules.add(new DolphinModule());
 
 		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
 			if (!world.isClientSide() && isModuleEnabled("MegaExtinguisher")) {
@@ -181,10 +209,11 @@ public class MyClient implements ClientModInitializer {
 								BlockState state = world.getBlockState(targetPos);
 
 								if (state.getBlock() instanceof BaseFireBlock) {
-									if (world.setBlockAndUpdate(targetPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState())) {
+									if (world.setBlockAndUpdate(targetPos, AIR.defaultBlockState())) {
 										extinguishedCount++;
 										spawnExtinguishParticles(world, targetPos);
 									}
+
 									continue;
 								}
 
@@ -194,8 +223,10 @@ public class MyClient implements ClientModInitializer {
 											targetPos,
 											state.setValue(net.minecraft.world.level.block.CampfireBlock.LIT, false)
 									);
+
 									extinguishedCount++;
 									spawnExtinguishParticles(world, targetPos);
+
 									continue;
 								}
 
@@ -232,7 +263,7 @@ public class MyClient implements ClientModInitializer {
 		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
 			if (!world.isClientSide() && isModuleEnabled("MultiBuilder")) {
 				ItemStack stack = player.getItemInHand(hand);
-				if (stack.getItem() instanceof net.minecraft.world.item.BlockItem blockItem) {
+				if (stack.getItem() instanceof BlockItem blockItem) {
 					MultiBuilderModule builder = null;
 					for (Module m : modules) {
 						if (m instanceof MultiBuilderModule mb) {
@@ -268,10 +299,16 @@ public class MyClient implements ClientModInitializer {
 
 						int placedCount = 0;
 						for (BlockPos targetPos : targets) {
-							if (!world.isInWorldBounds(targetPos)) continue;
+							if (!world.isInWorldBounds(targetPos)) {
+								continue;
+							}
 							BlockState currentState = world.getBlockState(targetPos);
-							if (!currentState.canBeReplaced()) continue;
-							if (!player.isCreative() && stack.getCount() <= placedCount) break;
+							if (!currentState.canBeReplaced()) {
+								continue;
+							}
+							if (!player.isCreative() && stack.getCount() <= placedCount) {
+								break;
+							}
 
 							if (world.setBlockAndUpdate(targetPos, placeState)) {
 								placedCount++;
@@ -304,7 +341,9 @@ public class MyClient implements ClientModInitializer {
 							for (int dz = -3; dz != 4; dz++) {
 								BlockPos targetPos = centerPos.offset(dx, dy, dz);
 								BlockState targetState = world.getBlockState(targetPos);
-								if (targetState.isAir()) continue;
+								if (targetState.isAir()) {
+									continue;
+								}
 
 								net.minecraft.world.phys.BlockHitResult subHit = new net.minecraft.world.phys.BlockHitResult(
 										Vec3.atCenterOf(targetPos),
@@ -359,24 +398,34 @@ public class MyClient implements ClientModInitializer {
 		});
 
 		PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, blockEntity) -> {
-			if (world.isClientSide() || !isModuleEnabled("AreaMiner")) return;
+			if (world.isClientSide() || !isModuleEnabled("AreaMiner")) {
+				return;
+			}
 
-			if (AreaMinerModule.isBreaking) return;
+			if (AreaMinerModule.isBreaking) {
+				return;
+			}
 
 			ItemStack tool = player.getMainHandItem();
-			if (tool.isEmpty() || !tool.isCorrectToolForDrops(state)) return;
+			if (tool.isEmpty() || !tool.isCorrectToolForDrops(state)) {
+				return;
+			}
 
 			AreaMinerModule.isBreaking = true;
 			try {
 				for (int dx = -1; dx != 2; dx++) {
 					for (int dy = -1; dy != 2; dy++) {
 						for (int dz = -1; dz != 2; dz++) {
-							if (dx == 0 && dy == 0 && dz == 0) continue;
+							if (dx == 0 && dy == 0 && dz == 0) {
+								continue;
+							}
 
 							BlockPos targetPos = pos.offset(dx, dy, dz);
 							BlockState targetState = world.getBlockState(targetPos);
 
-							if (targetState.isAir() || !(targetState.getDestroySpeed(world, targetPos) >= 0)) continue;
+							if (targetState.isAir() || !(targetState.getDestroySpeed(world, targetPos) >= 0)) {
+								continue;
+							}
 
 							if (tool.isCorrectToolForDrops(targetState)) {
 								if (!player.isCreative()) {
@@ -405,7 +454,9 @@ public class MyClient implements ClientModInitializer {
 				mc.setScreen(new ClickGuiScreen());
 			}
 
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			for (Module m : modules) {
 				if (m.isEnabled()) {
@@ -416,7 +467,9 @@ public class MyClient implements ClientModInitializer {
 
 		HudRenderCallback.EVENT.register((guiGraphics, tickDelta) -> {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			guiGraphics.drawString(mc.font, "§b§ ProHacker §7v1.0 §f[Press Right-Shift to open menu]", 10, 10, 0xFFFFFF);
 
@@ -448,8 +501,10 @@ public class MyClient implements ClientModInitializer {
 				if (mc.player != null) {
 					mc.player.displayClientMessage(Component.literal("§b[MyClient] §fCustomized ID: §r" + newName), false);
 				}
+
 				return false;
 			}
+
 			return true;
 		});
 
@@ -470,6 +525,7 @@ public class MyClient implements ClientModInitializer {
 							false
 					);
 				}
+
 				return false;
 			}
 
@@ -491,11 +547,13 @@ public class MyClient implements ClientModInitializer {
 						arrow.discard();
 						removed++;
 					}
+
 					mc.player.displayClientMessage(
 							Component.literal("§b[MyClient] §fCleared §e" + removed + " §farrows."),
 							false
 					);
 				}
+
 				return false;
 			}
 
@@ -511,6 +569,7 @@ public class MyClient implements ClientModInitializer {
 								false
 						);
 					}
+
 					return false;
 				}
 			}
@@ -522,6 +581,7 @@ public class MyClient implements ClientModInitializer {
 						false
 				);
 			}
+
 			return false;
 		});
 	}
@@ -544,11 +604,15 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onRender3D(WorldRenderContext context) {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			PoseStack poseStack = context.matrixStack();
 			Camera camera = context.camera();
-			if (poseStack == null || camera == null) return;
+			if (poseStack == null || camera == null) {
+				return;
+			}
 
 			Vec3 camPos = camera.getPosition();
 			Vec3 lookVec = Vec3.directionFromRotation(camera.getXRot(), camera.getYRot());
@@ -559,27 +623,519 @@ public class MyClient implements ClientModInitializer {
 			PoseStack.Pose pose = poseStack.last();
 
 			for (Entity entity : mc.level.entitiesForRendering()) {
-				if (entity == mc.player || !(entity instanceof LivingEntity)) continue;
+				if (entity == mc.player || !(entity instanceof LivingEntity)) {
+					continue;
+				}
+
 				double distance = mc.player.distanceTo(entity);
-				if (distance > 50.0) continue;
+				if (distance > 50.0) {
+					continue;
+				}
 
 				Vec3 targetPos = entity.position().add(0, entity.getBbHeight() / 2.0, 0).subtract(camPos);
 				float ratio = (float) Math.min(distance / 30.0, 1.0);
 				float red = 1.0f - ratio;
 				float green = ratio;
+				float blue = 0.2f;
 
-				lineConsumer.addVertex(pose, (float) startPos.x, (float) startPos.y, (float) startPos.z)
-						.setColor(red, green, blue(0.2f), 1.0f)
-						.setNormal(pose, 0.0f, 1.0f, 0.0f);
-
-				lineConsumer.addVertex(pose, (float) targetPos.x, (float) targetPos.y, (float) targetPos.z)
-						.setColor(red, green, blue(0.2f), 1.0f)
-						.setNormal(pose, 0.0f, 1.0f, 0.0f);
+				lineConsumer.addVertex(pose, (float) startPos.x, (float) startPos.y, (float) startPos.z).setColor(red, green, blue, 1.0f).setNormal(pose, 0.0f, 1.0f, 0.0f);
+				lineConsumer.addVertex(pose, (float) targetPos.x, (float) targetPos.y, (float) targetPos.z).setColor(red, green, blue, 1.0f).setNormal(pose, 0.0f, 1.0f, 0.0f);
 			}
+
 			RenderSystem.enableDepthTest();
 		}
+	}
 
-		private float blue(float val) { return val; }
+    public static class ChestEspModule extends Module {
+        private static final double MAX_DISTANCE = 64.0;
+
+        public ChestEspModule() {
+			super("ChestESP", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+        }
+
+        @Override
+        public void onRender3D(WorldRenderContext context) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.level == null) {
+				return;
+			}
+
+            PoseStack poseStack = context.matrixStack();
+            Camera camera = context.camera();
+            if (poseStack == null || camera == null) {
+				return;
+			}
+
+            Vec3 camPos = camera.getPosition();
+            Vec3 playerPos = mc.player.position();
+
+            double maxDistSq = MAX_DISTANCE * MAX_DISTANCE;
+
+            java.util.List<net.minecraft.world.level.block.entity.BlockEntity> chests = new java.util.ArrayList<>();
+            for (net.minecraft.world.level.block.entity.BlockEntity blockEntity : getLoadedBlockEntities(mc.level, mc.player)) {
+                if (blockEntity == null || blockEntity.isRemoved()) {
+					continue;
+				}
+
+                boolean isNormalChest = blockEntity instanceof net.minecraft.world.level.block.entity.ChestBlockEntity;
+                boolean isEnderChest = blockEntity instanceof net.minecraft.world.level.block.entity.EnderChestBlockEntity;
+                if (!isNormalChest && !isEnderChest) {
+					continue;
+				}
+
+                if (blockEntity.getBlockPos().distToCenterSqr(playerPos) <= maxDistSq) {
+                    chests.add(blockEntity);
+                }
+            }
+
+            if (chests.isEmpty()) {
+				return;
+			}
+
+            com.mojang.blaze3d.systems.RenderSystem.disableDepthTest();
+            com.mojang.blaze3d.systems.RenderSystem.depthMask(false);
+            com.mojang.blaze3d.systems.RenderSystem.disableCull();
+            com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+            com.mojang.blaze3d.systems.RenderSystem.defaultBlendFunc();
+            com.mojang.blaze3d.systems.RenderSystem.setShader(net.minecraft.client.renderer.CoreShaders.POSITION_COLOR);
+
+            com.mojang.blaze3d.vertex.Tesselator tesselator = com.mojang.blaze3d.vertex.Tesselator.getInstance();
+            com.mojang.blaze3d.vertex.BufferBuilder buffer = tesselator.begin(
+                    com.mojang.blaze3d.vertex.VertexFormat.Mode.DEBUG_LINES,
+                    com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR
+            );
+
+            org.joml.Matrix4f matrix = poseStack.last().pose();
+
+            for (net.minecraft.world.level.block.entity.BlockEntity blockEntity : chests) {
+                boolean isEnderChest = blockEntity instanceof net.minecraft.world.level.block.entity.EnderChestBlockEntity;
+                net.minecraft.core.BlockPos pos = blockEntity.getBlockPos();
+
+                float r = isEnderChest ? 0.65f : 1.0f;
+                float g = isEnderChest ? 0.25f : 0.80f;
+                float b = isEnderChest ? 1.0f : 0.15f;
+
+                float x1 = (float) (pos.getX() + 0.0625 - camPos.x);
+                float y1 = (float) (pos.getY() - camPos.y);
+                float z1 = (float) (pos.getZ() + 0.0625 - camPos.z);
+                float x2 = (float) (pos.getX() + 0.9375 - camPos.x);
+                float y2 = (float) (pos.getY() + 0.875 - camPos.y);
+                float z2 = (float) (pos.getZ() + 0.9375 - camPos.z);
+
+                addDebugLine(buffer, matrix, x1, y1, z1, x2, y1, z1, r, g, b, 1.0f);
+                addDebugLine(buffer, matrix, x2, y1, z1, x2, y1, z2, r, g, b, 1.0f);
+                addDebugLine(buffer, matrix, x2, y1, z2, x1, y1, z2, r, g, b, 1.0f);
+                addDebugLine(buffer, matrix, x1, y1, z2, x1, y1, z1, r, g, b, 1.0f);
+
+                addDebugLine(buffer, matrix, x1, y2, z1, x2, y2, z1, r, g, b, 1.0f);
+                addDebugLine(buffer, matrix, x2, y2, z1, x2, y2, z2, r, g, b, 1.0f);
+                addDebugLine(buffer, matrix, x2, y2, z2, x1, y2, z2, r, g, b, 1.0f);
+                addDebugLine(buffer, matrix, x1, y2, z2, x1, y2, z1, r, g, b, 1.0f);
+
+                addDebugLine(buffer, matrix, x1, y1, z1, x1, y2, z1, r, g, b, 1.0f);
+                addDebugLine(buffer, matrix, x2, y1, z1, x2, y2, z1, r, g, b, 1.0f);
+                addDebugLine(buffer, matrix, x2, y1, z2, x2, y2, z2, r, g, b, 1.0f);
+                addDebugLine(buffer, matrix, x1, y1, z2, x1, y2, z2, r, g, b, 1.0f);
+            }
+
+            com.mojang.blaze3d.vertex.MeshData meshData = buffer.build();
+            if (meshData != null) {
+                com.mojang.blaze3d.vertex.BufferUploader.drawWithShader(meshData);
+            }
+
+            com.mojang.blaze3d.systems.RenderSystem.depthMask(true);
+            com.mojang.blaze3d.systems.RenderSystem.enableDepthTest();
+            com.mojang.blaze3d.systems.RenderSystem.enableCull();
+        }
+
+        private void addDebugLine(
+                com.mojang.blaze3d.vertex.BufferBuilder buffer,
+                org.joml.Matrix4f matrix,
+                float x1, float y1, float z1,
+                float x2, float y2, float z2,
+                float r, float g, float b, float a) {
+            buffer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a);
+            buffer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a);
+        }
+
+        private java.util.List<net.minecraft.world.level.block.entity.BlockEntity> getLoadedBlockEntities(
+                net.minecraft.client.multiplayer.ClientLevel level,
+                net.minecraft.client.player.LocalPlayer player) {
+            java.util.List<net.minecraft.world.level.block.entity.BlockEntity> list = new java.util.ArrayList<>();
+            int viewDist = Minecraft.getInstance().options.renderDistance().get();
+            int centerChunkX = player.chunkPosition().x;
+            int centerChunkZ = player.chunkPosition().z;
+
+            for (int cx = centerChunkX - viewDist; cx <= centerChunkX + viewDist; cx++) {
+                for (int cz = centerChunkZ - viewDist; cz <= centerChunkZ + viewDist; cz++) {
+                    if (!level.hasChunk(cx, cz)) {
+	                    continue;
+                    }
+                    net.minecraft.world.level.chunk.LevelChunk chunk = level.getChunk(cx, cz);
+                    list.addAll(chunk.getBlockEntities().values());
+                }
+            }
+            return list;
+        }
+    }
+
+	public static class PlayerEspModule extends Module {
+		private static final double MAX_DISTANCE = 128.0;
+
+		public PlayerEspModule() {
+			super("PlayerESP", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onRender3D(WorldRenderContext context) {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
+
+			PoseStack poseStack = context.matrixStack();
+			Camera camera = context.camera();
+			if (poseStack == null || camera == null) {
+				return;
+			}
+
+			Vec3 camPos = camera.getPosition();
+
+			java.util.List<net.minecraft.world.entity.player.Player> players = new java.util.ArrayList<>();
+			for (Entity entity : mc.level.entitiesForRendering()) {
+				if (!(entity instanceof net.minecraft.world.entity.player.Player otherPlayer)) {
+					continue;
+				}
+				if (otherPlayer == mc.player || !otherPlayer.isAlive()) {
+					continue;
+				}
+				if (mc.player.distanceTo(otherPlayer) > MAX_DISTANCE) {
+					continue;
+				}
+
+				players.add(otherPlayer);
+			}
+
+			if (players.isEmpty()) {
+				return;
+			}
+
+			com.mojang.blaze3d.systems.RenderSystem.disableDepthTest();
+			com.mojang.blaze3d.systems.RenderSystem.depthMask(false);
+			com.mojang.blaze3d.systems.RenderSystem.disableCull();
+			com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+			com.mojang.blaze3d.systems.RenderSystem.defaultBlendFunc();
+			com.mojang.blaze3d.systems.RenderSystem.setShader(net.minecraft.client.renderer.CoreShaders.POSITION_COLOR);
+
+			com.mojang.blaze3d.vertex.Tesselator tesselator = com.mojang.blaze3d.vertex.Tesselator.getInstance();
+			com.mojang.blaze3d.vertex.BufferBuilder buffer = tesselator.begin(
+					com.mojang.blaze3d.vertex.VertexFormat.Mode.DEBUG_LINES,
+					com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR
+			);
+
+			org.joml.Matrix4f matrix = poseStack.last().pose();
+
+			float r = 1.00f;
+			float g = 0.20f;
+			float b = 0.45f;
+
+			for (net.minecraft.world.entity.player.Player otherPlayer : players) {
+				AABB box = otherPlayer.getBoundingBox();
+				float x1 = (float) (box.minX - camPos.x);
+				float y1 = (float) (box.minY - camPos.y);
+				float z1 = (float) (box.minZ - camPos.z);
+				float x2 = (float) (box.maxX - camPos.x);
+				float y2 = (float) (box.maxY - camPos.y);
+				float z2 = (float) (box.maxZ - camPos.z);
+				float midY = (y1 + y2) * 0.5f;
+
+				addDebugLine(buffer, matrix, x1, y1, z1, x2, y1, z1, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x2, y1, z1, x2, y1, z2, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x2, y1, z2, x1, y1, z2, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x1, y1, z2, x1, y1, z1, r, g, b, 1.0f);
+
+				addDebugLine(buffer, matrix, x1, y2, z1, x2, y2, z1, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x2, y2, z1, x2, y2, z2, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x2, y2, z2, x1, y2, z2, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x1, y2, z2, x1, y2, z1, r, g, b, 1.0f);
+
+				addDebugLine(buffer, matrix, x1, y1, z1, x1, y2, z1, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x2, y1, z1, x2, y2, z1, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x2, y1, z2, x2, y2, z2, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x1, y1, z2, x1, y2, z2, r, g, b, 1.0f);
+
+				addDebugLine(buffer, matrix, x1, midY, z1, x2, midY, z2, r, g, b, 1.0f);
+				addDebugLine(buffer, matrix, x2, midY, z1, x1, midY, z2, r, g, b, 1.0f);
+			}
+
+			com.mojang.blaze3d.vertex.MeshData meshData = buffer.build();
+			if (meshData != null) {
+				com.mojang.blaze3d.vertex.BufferUploader.drawWithShader(meshData);
+			}
+
+			com.mojang.blaze3d.systems.RenderSystem.depthMask(true);
+			com.mojang.blaze3d.systems.RenderSystem.enableDepthTest();
+			com.mojang.blaze3d.systems.RenderSystem.enableCull();
+		}
+
+		private void addDebugLine(
+
+                com.mojang.blaze3d.vertex.BufferBuilder buffer, org.joml.Matrix4f matrix,
+                float x1, float y1, float z1,
+                float x2, float y2, float z2,
+                float r, float g, float b, float a) {
+			buffer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a);
+			buffer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a);
+		}
+	}
+
+	public static class SpawnerEspModule extends Module {
+		private static final double MAX_DISTANCE = 64.0;
+
+		public SpawnerEspModule() {
+			super("SpawnerESP", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onRender3D(WorldRenderContext context) {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
+
+			PoseStack poseStack = context.matrixStack();
+			Camera camera = context.camera();
+			if (poseStack == null || camera == null) {
+				return;
+			}
+
+			Vec3 camPos = camera.getPosition();
+			Vec3 playerPos = mc.player.position();
+			double maxDistSq = MAX_DISTANCE * MAX_DISTANCE;
+
+			List<SpawnerBlockEntity> spawners = new ArrayList<>();
+			for (BlockEntity blockEntity : getLoadedBlockEntities(mc.level, mc.player)) {
+				if (blockEntity == null || blockEntity.isRemoved()) {
+					continue;
+				}
+				if (!(blockEntity instanceof SpawnerBlockEntity spawner)) {
+					continue;
+				}
+
+				if (spawner.getBlockPos().distToCenterSqr(playerPos) <= maxDistSq) {
+					spawners.add(spawner);
+				}
+			}
+
+			if (spawners.isEmpty()) {
+				return;
+			}
+
+			com.mojang.blaze3d.systems.RenderSystem.disableDepthTest();
+			com.mojang.blaze3d.systems.RenderSystem.depthMask(false);
+			com.mojang.blaze3d.systems.RenderSystem.disableCull();
+			com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+			com.mojang.blaze3d.systems.RenderSystem.defaultBlendFunc();
+			com.mojang.blaze3d.systems.RenderSystem.setShader(net.minecraft.client.renderer.CoreShaders.POSITION_COLOR);
+
+			com.mojang.blaze3d.vertex.Tesselator tesselator = com.mojang.blaze3d.vertex.Tesselator.getInstance();
+			com.mojang.blaze3d.vertex.BufferBuilder buffer = tesselator.begin(
+					com.mojang.blaze3d.vertex.VertexFormat.Mode.DEBUG_LINES,
+					com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR
+			);
+
+			org.joml.Matrix4f matrix = poseStack.last().pose();
+
+			float r = 0.20f;
+			float g = 0.90f;
+			float b = 1.00f;
+
+			for (net.minecraft.world.level.block.entity.SpawnerBlockEntity spawner : spawners) {
+				net.minecraft.core.BlockPos pos = spawner.getBlockPos();
+
+				float x1 = (float) (pos.getX() - camPos.x);
+				float y1 = (float) (pos.getY() - camPos.y);
+				float z1 = (float) (pos.getZ() - camPos.z);
+				float x2 = (float) (pos.getX() + 1.0 - camPos.x);
+				float y2 = (float) (pos.getY() + 1.0 - camPos.y);
+				float z2 = (float) (pos.getZ() + 1.0 - camPos.z);
+
+				drawBoxLines(buffer, matrix, x1, y1, z1, x2, y2, z2, r, g, b, 1.0f);
+			}
+
+			com.mojang.blaze3d.vertex.MeshData meshData = buffer.build();
+			if (meshData != null) {
+				com.mojang.blaze3d.vertex.BufferUploader.drawWithShader(meshData);
+			}
+
+			com.mojang.blaze3d.systems.RenderSystem.depthMask(true);
+			com.mojang.blaze3d.systems.RenderSystem.enableDepthTest();
+			com.mojang.blaze3d.systems.RenderSystem.enableCull();
+		}
+
+		private void drawBoxLines(com.mojang.blaze3d.vertex.BufferBuilder buffer, org.joml.Matrix4f matrix,
+								  float x1, float y1, float z1,
+								  float x2, float y2, float z2,
+								  float r, float g, float b, float a) {
+			addDebugLine(buffer, matrix, x1, y1, z1, x2, y1, z1, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y1, z1, x2, y1, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y1, z2, x1, y1, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x1, y1, z2, x1, y1, z1, r, g, b, a);
+
+			addDebugLine(buffer, matrix, x1, y2, z1, x2, y2, z1, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y2, z1, x2, y2, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y2, z2, x1, y2, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x1, y2, z2, x1, y2, z1, r, g, b, a);
+
+			addDebugLine(buffer, matrix, x1, y1, z1, x1, y2, z1, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y1, z1, x2, y2, z1, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y1, z2, x2, y2, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x1, y1, z2, x1, y2, z2, r, g, b, a);
+		}
+
+		private void addDebugLine(com.mojang.blaze3d.vertex.BufferBuilder buffer, org.joml.Matrix4f matrix,
+								  float x1, float y1, float z1,
+								  float x2, float y2, float z2,
+								  float r, float g, float b, float a) {
+			buffer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a);
+			buffer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a);
+		}
+
+		private java.util.List<net.minecraft.world.level.block.entity.BlockEntity> getLoadedBlockEntities(
+				net.minecraft.client.multiplayer.ClientLevel level,
+				net.minecraft.client.player.LocalPlayer player) {
+			java.util.List<net.minecraft.world.level.block.entity.BlockEntity> list = new java.util.ArrayList<>();
+			int viewDist = Minecraft.getInstance().options.renderDistance().get();
+			int centerChunkX = player.chunkPosition().x;
+			int centerChunkZ = player.chunkPosition().z;
+
+			for (int cx = centerChunkX - viewDist; cx <= centerChunkX + viewDist; cx++) {
+				for (int cz = centerChunkZ - viewDist; cz <= centerChunkZ + viewDist; cz++) {
+					if (!level.hasChunk(cx, cz)) {
+						continue;
+					}
+					net.minecraft.world.level.chunk.LevelChunk chunk = level.getChunk(cx, cz);
+					list.addAll(chunk.getBlockEntities().values());
+				}
+			}
+
+			return list;
+		}
+	}
+
+	public static class MobEspModule extends Module {
+		private static final double MAX_DISTANCE = 64.0;
+
+		public MobEspModule() {
+			super("MobESP", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onRender3D(WorldRenderContext context) {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
+
+			PoseStack poseStack = context.matrixStack();
+			Camera camera = context.camera();
+			if (poseStack == null || camera == null) {
+				return;
+			}
+
+			Vec3 camPos = camera.getPosition();
+
+			java.util.List<LivingEntity> mobs = new java.util.ArrayList<>();
+			for (Entity entity : mc.level.entitiesForRendering()) {
+				if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+					continue;
+				}
+				if (entity instanceof net.minecraft.world.entity.player.Player) {
+					continue;
+				}
+				if (!living.isAlive() || !(living.getHealth() > 0)) {
+					continue;
+				}
+				if (mc.player.distanceTo(living) > MAX_DISTANCE) {
+					continue;
+				}
+
+				mobs.add(living);
+			}
+
+			if (mobs.isEmpty()) {
+				return;
+			}
+
+			com.mojang.blaze3d.systems.RenderSystem.disableDepthTest();
+			com.mojang.blaze3d.systems.RenderSystem.depthMask(false);
+			com.mojang.blaze3d.systems.RenderSystem.disableCull();
+			com.mojang.blaze3d.systems.RenderSystem.enableBlend();
+			com.mojang.blaze3d.systems.RenderSystem.defaultBlendFunc();
+			com.mojang.blaze3d.systems.RenderSystem.setShader(net.minecraft.client.renderer.CoreShaders.POSITION_COLOR);
+
+			com.mojang.blaze3d.vertex.Tesselator tesselator = com.mojang.blaze3d.vertex.Tesselator.getInstance();
+			com.mojang.blaze3d.vertex.BufferBuilder buffer = tesselator.begin(
+					com.mojang.blaze3d.vertex.VertexFormat.Mode.DEBUG_LINES,
+					com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR
+			);
+
+			org.joml.Matrix4f matrix = poseStack.last().pose();
+
+			for (LivingEntity mob : mobs) {
+				boolean hostile = mob instanceof net.minecraft.world.entity.monster.Enemy;
+				float r = hostile ? 1.00f : 0.25f;
+				float g = hostile ? 0.25f : 1.00f;
+				float b = hostile ? 0.25f : 0.45f;
+
+				AABB box = mob.getBoundingBox();
+				float x1 = (float) (box.minX - camPos.x);
+				float y1 = (float) (box.minY - camPos.y);
+				float z1 = (float) (box.minZ - camPos.z);
+				float x2 = (float) (box.maxX - camPos.x);
+				float y2 = (float) (box.maxY - camPos.y);
+				float z2 = (float) (box.maxZ - camPos.z);
+
+				drawBoxLines(buffer, matrix, x1, y1, z1, x2, y2, z2, r, g, b, 1.0f);
+			}
+
+			com.mojang.blaze3d.vertex.MeshData meshData = buffer.build();
+			if (meshData != null) {
+				com.mojang.blaze3d.vertex.BufferUploader.drawWithShader(meshData);
+			}
+
+			com.mojang.blaze3d.systems.RenderSystem.depthMask(true);
+			com.mojang.blaze3d.systems.RenderSystem.enableDepthTest();
+			com.mojang.blaze3d.systems.RenderSystem.enableCull();
+		}
+
+		private void drawBoxLines(com.mojang.blaze3d.vertex.BufferBuilder buffer, org.joml.Matrix4f matrix,
+								  float x1, float y1, float z1,
+								  float x2, float y2, float z2,
+								  float r, float g, float b, float a) {
+			addDebugLine(buffer, matrix, x1, y1, z1, x2, y1, z1, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y1, z1, x2, y1, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y1, z2, x1, y1, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x1, y1, z2, x1, y1, z1, r, g, b, a);
+
+			addDebugLine(buffer, matrix, x1, y2, z1, x2, y2, z1, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y2, z1, x2, y2, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y2, z2, x1, y2, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x1, y2, z2, x1, y2, z1, r, g, b, a);
+
+			addDebugLine(buffer, matrix, x1, y1, z1, x1, y2, z1, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y1, z1, x2, y2, z1, r, g, b, a);
+			addDebugLine(buffer, matrix, x2, y1, z2, x2, y2, z2, r, g, b, a);
+			addDebugLine(buffer, matrix, x1, y1, z2, x1, y2, z2, r, g, b, a);
+		}
+
+		private void addDebugLine(com.mojang.blaze3d.vertex.BufferBuilder buffer, org.joml.Matrix4f matrix,
+								  float x1, float y1, float z1,
+								  float x2, float y2, float z2,
+								  float r, float g, float b, float a) {
+			buffer.addVertex(matrix, x1, y1, z1).setColor(r, g, b, a);
+			buffer.addVertex(matrix, x2, y2, z2).setColor(r, g, b, a);
+		}
 	}
 
 	public static class AutoSprintModule extends Module {
@@ -621,7 +1177,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.gameMode == null) return;
+			if (mc.player == null || mc.gameMode == null) {
+				return;
+			}
 
 			if (mc.player.isUsingItem() && mc.player.getUseItem().getItem() instanceof BowItem) {
 				if (mc.getSingleplayerServer() != null) {
@@ -660,7 +1218,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.gameMode == null || mc.getConnection() == null) return;
+			if (mc.player == null || mc.gameMode == null || mc.getConnection() == null) {
+				return;
+			}
 
 			if (cooldown > 0) {
 				cooldown--;
@@ -721,7 +1281,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (mc.options.keyUse.isDown() && mc.player.getMainHandItem().getItem() instanceof ThrowablePotionItem) {
 				if (mc.getSingleplayerServer() != null) {
@@ -757,18 +1319,26 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null || mc.gameMode == null || mc.getConnection() == null) return;
+			if (mc.player == null || mc.level == null || mc.gameMode == null || mc.getConnection() == null) {
+				return;
+			}
 
 			if (mc.player.getAttackStrengthScale(0.5F) >= 0.95F) {
 				LivingEntity closestTarget = null;
 				double closestDistance = 4.5;
 
 				for (Entity entity : mc.level.entitiesForRendering()) {
-					if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
-					if (!living.isAlive() || living.getHealth() <= 0) continue;
+					if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+						continue;
+					}
+					if (!living.isAlive() || living.getHealth() <= 0) {
+						continue;
+					}
 
 					double dist = mc.player.distanceTo(living);
-					if (dist > closestDistance) continue;
+					if (dist > closestDistance) {
+						continue;
+					}
 
 					closestDistance = dist;
 					closestTarget = living;
@@ -811,7 +1381,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null || mc.gameMode == null || mc.getConnection() == null) return;
+			if (mc.player == null || mc.level == null || mc.gameMode == null || mc.getConnection() == null) {
+				return;
+			}
 
 			if (renderTrailTicks > 0) {
 				renderTrailTicks--;
@@ -822,11 +1394,17 @@ public class MyClient implements ClientModInitializer {
 				double maxRange = 25.0;
 
 				for (Entity entity : mc.level.entitiesForRendering()) {
-					if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
-					if (!living.isAlive() || !(living.getHealth() > 0)) continue;
+					if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+						continue;
+					}
+					if (!living.isAlive() || !(living.getHealth() > 0)) {
+						continue;
+					}
 
 					double dist = mc.player.distanceTo(living);
-					if (dist > maxRange) continue;
+					if (dist > maxRange) {
+						continue;
+					}
 
 					maxRange = dist;
 					target = living;
@@ -872,14 +1450,20 @@ public class MyClient implements ClientModInitializer {
 
 		@Override
 		public void onRender3D(WorldRenderContext context) {
-			if (renderTrailTicks == 0 || lastTpTarget == null || !lastTpTarget.isAlive()) return;
+			if (renderTrailTicks == 0 || lastTpTarget == null || !lastTpTarget.isAlive()) {
+				return;
+			}
 
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null) return;
+			if (mc.player == null) {
+				return;
+			}
 
 			PoseStack poseStack = context.matrixStack();
 			Camera camera = context.camera();
-			if (poseStack == null || camera == null) return;
+			if (poseStack == null || camera == null) {
+				return;
+			}
 
 			Vec3 camPos = camera.getPosition();
 			Vec3 start = mc.player.position().add(0, 1.0, 0).subtract(camPos);
@@ -909,18 +1493,26 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null || mc.gameMode == null || mc.getConnection() == null) return;
+			if (mc.player == null || mc.level == null || mc.gameMode == null || mc.getConnection() == null) {
+				return;
+			}
 
 			if (mc.player.getAttackStrengthScale(0.5F) >= 0.95F) {
 				boolean attackedAny = false;
 				Vec3 eyePos = mc.player.getEyePosition();
 
 				for (Entity entity : mc.level.entitiesForRendering()) {
-					if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
-					if (!living.isAlive() || !(living.getHealth() > 0)) continue;
+					if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+						continue;
+					}
+					if (!living.isAlive() || !(living.getHealth() > 0)) {
+						continue;
+					}
 
 					double dist = mc.player.distanceTo(living);
-					if (dist > 5.5) continue;
+					if (dist > 5.5) {
+						continue;
+					}
 
 					Vec3 targetCenter = living.position().add(0, living.getBbHeight() / 2.0, 0);
 					double diffX = targetCenter.x - eyePos.x;
@@ -945,73 +1537,408 @@ public class MyClient implements ClientModInitializer {
 		}
 	}
 
-	public static class BlinkAuraModule extends Module {
-		private int teleportDelay = 0;
+    public static class BlinkAuraModule extends Module {
+        private int blinkDelay = 0;
 
-		public BlinkAuraModule() {
-			super("BlinkAura", Category.COMBAT, GLFW.GLFW_KEY_UNKNOWN);
+        public BlinkAuraModule() {
+            super("BlinkAura", Category.COMBAT, GLFW.GLFW_KEY_UNKNOWN);
+        }
+
+        @Override
+        public void onTick() {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.level == null || mc.gameMode == null) {
+	            return;
+            }
+
+            LivingEntity target = null;
+            double maxRange = 8.0;
+
+            for (Entity entity : mc.level.entitiesForRendering()) {
+                if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+	                continue;
+                }
+                if (!living.isAlive() || !(living.getHealth() > 0)) {
+	                continue;
+                }
+
+                double dist = mc.player.distanceTo(living);
+                if (dist > maxRange) {
+	                continue;
+                }
+
+                maxRange = dist;
+                target = living;
+            }
+
+            if (target == null) {
+	            return;
+            }
+
+            blinkDelay++;
+            if (blinkDelay >= 2) {
+                blinkDelay = 0;
+
+                double randomAngle = Math.random() * Math.PI * 2.0;
+                double radius = 2.8;
+
+                double nextX = target.getX() + Math.cos(randomAngle) * radius;
+                double nextZ = target.getZ() + Math.sin(randomAngle) * radius;
+                double nextY = target.getY() + 0.2;
+
+                mc.player.setPos(nextX, nextY, nextZ);
+                mc.player.setDeltaMovement(0, 0, 0);
+                mc.player.hasImpulse = true;
+
+                Vec3 eyePos = mc.player.getEyePosition();
+                Vec3 targetCenter = target.position().add(0, target.getBbHeight() / 2.0, 0);
+                double diffX = targetCenter.x - eyePos.x;
+                double diffY = targetCenter.y - eyePos.y;
+                double diffZ = targetCenter.z - eyePos.z;
+                double diffXZ = Math.sqrt(diffX * diffX + diffZ * diffZ);
+
+                float yaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90.0F;
+                float pitch = (float) -Math.toDegrees(Math.atan2(diffY, diffXZ));
+
+                mc.player.setYRot(yaw);
+                mc.player.setXRot(pitch);
+            }
+
+            if (mc.player.getAttackStrengthScale(0.5F) >= 0.90F) {
+                mc.gameMode.attack(mc.player, target);
+                mc.player.swing(InteractionHand.MAIN_HAND);
+            }
+        }
+    }
+
+	public static class DodgeModule extends Module {
+		private static final double DETECT_RANGE = 7.5;
+		private static final double EXPLOSIVE_RANGE = 8.0;
+		private static final double DODGE_SPEED = 0.54;
+		private int dodgeCooldown = 0;
+
+		public DodgeModule() {
+			super("Dodge", Category.MOVEMENT, GLFW.GLFW_KEY_UNKNOWN);
 		}
 
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null || mc.gameMode == null) return;
-
-			LivingEntity target = null;
-			double maxRange = 8.0;
-
-			for (Entity entity : mc.level.entitiesForRendering()) {
-				if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
-				if (!living.isAlive() || !(living.getHealth() > 0)) continue;
-
-				double dist = mc.player.distanceTo(living);
-				if (dist > maxRange) continue;
-
-				maxRange = dist;
-				target = living;
+			if (mc.player == null || mc.level == null) {
+				return;
 			}
 
-			if (target == null) return;
+			if (dodgeCooldown > 0) {
+				dodgeCooldown--;
+			}
 
-			teleportDelay++;
-			if (teleportDelay >= 2) {
-				teleportDelay = 0;
+			Vec3 dodgeDir = findThreatDodgeDirection(mc);
+			if (dodgeDir != null && dodgeCooldown == 0) {
+				Vec3 vel = mc.player.getDeltaMovement();
+				double nextY = mc.player.onGround() ? Math.max(vel.y, 0.24) : vel.y;
 
-				double randomAngle = Math.random() * Math.PI * 2.0;
-				double radius = 2.8;
+				mc.player.setDeltaMovement(
+						dodgeDir.x * DODGE_SPEED,
+						nextY,
+						dodgeDir.z * DODGE_SPEED
+				);
+				mc.player.hasImpulse = true;
+				dodgeCooldown = 4;
+			}
+		}
 
-				double nextX = target.getX() + Math.cos(randomAngle) * radius;
-				double nextZ = target.getZ() + Math.sin(randomAngle) * radius;
-				double nextY = target.getY() + 0.2;
+		private boolean isTargetProjectile(net.minecraft.world.entity.Entity entity) {
+			return entity instanceof net.minecraft.world.entity.projectile.AbstractArrow
+					|| entity instanceof net.minecraft.world.entity.projectile.ThrownPotion
+					|| entity instanceof net.minecraft.world.entity.projectile.Snowball
+					|| entity instanceof net.minecraft.world.entity.projectile.WitherSkull;
+		}
 
-				mc.player.setPos(nextX, nextY, nextZ);
-				mc.player.setDeltaMovement(0, 0, 0);
+		private Vec3 findThreatDodgeDirection(Minecraft mc) {
+			Vec3 playerCenter = mc.player.position().add(0.0, mc.player.getBbHeight() * 0.5, 0.0);
+			double playerRadius = mc.player.getBbWidth() * 0.5;
 
-				if (mc.getSingleplayerServer() != null) {
-					ServerPlayer serverPlayer = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-					if (serverPlayer != null) {
-						serverPlayer.teleportTo(nextX, nextY, nextZ);
-					}
+			for (Entity entity : mc.level.entitiesForRendering()) {
+				if (!entity.isAlive()) {
+					continue;
 				}
 
-				Vec3 eyePos = mc.player.getEyePosition();
-				Vec3 targetCenter = target.position().add(0, target.getBbHeight() / 2.0, 0);
-				double diffX = targetCenter.x - eyePos.x;
-				double diffY = targetCenter.y - eyePos.y;
-				double diffZ = targetCenter.z - eyePos.z;
-				double diffXZ = Math.sqrt(diffX * diffX + diffZ * diffZ);
+				if (entity instanceof net.minecraft.world.entity.item.PrimedTnt tnt) {
+					double dist = mc.player.distanceTo(tnt);
+					if (dist <= EXPLOSIVE_RANGE && tnt.getFuse() <= 28) {
+						Vec3 away = mc.player.position().subtract(tnt.position());
+						Vec3 horizAway = new Vec3(away.x, 0.0, away.z);
+						if (horizAway.lengthSqr() > 1.0e-5) {
+							return horizAway.normalize();
+						}
+					}
+				} else if (entity instanceof net.minecraft.world.entity.monster.Creeper creeper) {
+					double dist = mc.player.distanceTo(creeper);
+					boolean isSwelling = creeper.getSwellDir() > 0 || creeper.getSwelling(1.0F) > 0.05F;
+					if (dist <= 5.5 && isSwelling) {
+						Vec3 away = mc.player.position().subtract(creeper.position());
+						Vec3 horizAway = new Vec3(away.x, 0.0, away.z);
+						if (horizAway.lengthSqr() > 1.0e-5) {
+							return horizAway.normalize();
+						}
+					}
+				}
+			}
 
-				float yaw = (float) Math.toDegrees(Math.atan2(diffZ, diffX)) - 90.0F;
-				float pitch = (float) -Math.toDegrees(Math.atan2(diffY, diffXZ));
+			double detectRangeSq = DETECT_RANGE * DETECT_RANGE;
+			for (Entity entity : mc.level.entitiesForRendering()) {
+				if (!isTargetProjectile(entity) || !entity.isAlive()) {
+					continue;
+				}
+				if (entity.position().distanceToSqr(playerCenter) > detectRangeSq) {
+					continue;
+				}
 
-				mc.player.setYRot(yaw);
-				mc.player.setXRot(pitch);
+				Vec3 vel = entity.getDeltaMovement();
+				double speedSq = vel.lengthSqr();
+				if (speedSq < 0.02) {
+					continue;
+				}
+
+				boolean isArrow = entity instanceof net.minecraft.world.entity.projectile.AbstractArrow;
+				int horizonTicks = isArrow ? 8 : 5;
+				double gravity = isArrow ? 0.05 : 0.03;
+
+				Vec3 start = entity.position();
+				Vec3 end = predictProjectilePoint(start, vel, gravity, horizonTicks);
+
+				Vec3 closestPoint = closestPointOnSegment(start, end, playerCenter);
+				double distToLine = closestPoint.distanceTo(playerCenter);
+
+				double hitThreshold = playerRadius + (isArrow ? 0.75 : 0.95);
+				if (distToLine <= hitThreshold) {
+					Vec3 flightDir = end.subtract(start);
+					if (flightDir.lengthSqr() < 1.0e-6) {
+						continue;
+					}
+					Vec3 flightNorm = flightDir.normalize();
+
+					double projAlongFlight = closestPoint.subtract(start).dot(flightNorm);
+					if (projAlongFlight < -0.2) {
+						continue;
+					}
+
+					Vec3 horizDir = new Vec3(vel.x, 0.0, vel.z);
+					if (horizDir.lengthSqr() < 1.0e-5) {
+						continue;
+					}
+					Vec3 hDir = horizDir.normalize();
+
+					Vec3 right = new Vec3(-hDir.z, 0.0, hDir.x);
+					Vec3 left = right.scale(-1.0);
+
+					Vec3 offsetFromLine = playerCenter.subtract(closestPoint);
+					Vec3 horizOffset = new Vec3(offsetFromLine.x, 0.0, offsetFromLine.z);
+
+					if (horizOffset.lengthSqr() > 1.0e-5) {
+						return horizOffset.normalize();
+					}
+
+					return right.dot(horizDir) >= 0.0 ? right : left;
+				}
+			}
+
+			return null;
+		}
+
+		private Vec3 predictProjectilePoint(Vec3 start, Vec3 vel, double gravity, int ticks) {
+			double x = start.x;
+			double y = start.y;
+			double z = start.z;
+			double vx = vel.x;
+			double vy = vel.y;
+			double vz = vel.z;
+
+			for (int i = 0; i < ticks; i++) {
+				x += vx;
+				y += vy;
+				z += vz;
+				vy = (vy - gravity) * 0.99;
+				vx *= 0.99;
+				vz *= 0.99;
+			}
+			return new Vec3(x, y, z);
+		}
+
+		private Vec3 closestPointOnSegment(Vec3 a, Vec3 b, Vec3 p) {
+			Vec3 ab = b.subtract(a);
+			double lenSq = ab.lengthSqr();
+			if (lenSq < 1.0e-7) {
+				return a;
+			}
+
+			double t = p.subtract(a).dot(ab) / lenSq;
+			t = Math.max(0.0, Math.min(1.0, t));
+
+			return a.add(ab.scale(t));
+		}
+	}
+
+	public static class AntiKnockbackModule extends Module {
+		private static final double HORIZONTAL_FACTOR = 0.0;
+		private static final double VERTICAL_FACTOR = 0.0;
+		private Vec3 lastSafeVel = Vec3.ZERO;
+
+		public AntiKnockbackModule() {
+			super("AntiKnockback", Category.COMBAT, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
+
+			Vec3 currentVel = mc.player.getDeltaMovement();
+
+			if (mc.player.hurtTime > 0 || mc.player.hasImpulse) {
+				double vx = currentVel.x * HORIZONTAL_FACTOR;
+				double vz = currentVel.z * HORIZONTAL_FACTOR;
+				double vy = currentVel.y > 0.0 ? currentVel.y * VERTICAL_FACTOR : currentVel.y;
+
+				mc.player.setDeltaMovement(vx, vy, vz);
+				mc.player.hasImpulse = false;
+			}
+
+			lastSafeVel = mc.player.getDeltaMovement();
+		}
+	}
+
+	public static class KnockbackModule extends Module {
+		private static final double MAX_RANGE = 4.2;
+
+		public KnockbackModule() {
+			super("Knockback", Category.COMBAT, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null || mc.gameMode == null) {
+				return;
+			}
+
+			LivingEntity target = null;
+			double bestDist = MAX_RANGE;
+
+			for (Entity entity : mc.level.entitiesForRendering()) {
+				if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+					continue;
+				}
+				if (!living.isAlive() || !(living.getHealth() > 0)) {
+					continue;
+				}
+
+				double dist = mc.player.distanceTo(living);
+				if (dist <= bestDist) {
+					bestDist = dist;
+					target = living;
+				}
+			}
+
+			if (target == null) {
+				return;
+			}
+
+			if (!mc.player.isSprinting() && mc.player.getFoodData().getFoodLevel() > 6) {
+				mc.player.setSprinting(true);
 			}
 
 			if (mc.player.getAttackStrengthScale(0.5F) >= 0.90F) {
 				mc.gameMode.attack(mc.player, target);
 				mc.player.swing(InteractionHand.MAIN_HAND);
 			}
+		}
+	}
+
+	public static class AntiHurtcamModule extends Module {
+		public AntiHurtcamModule() {
+			super("AntiHurtcam", Category.COMBAT, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null) {
+				return;
+			}
+
+			if (mc.player.hurtTime > 0) {
+				mc.player.hurtTime = 0;
+				mc.player.hurtDuration = 0;
+			}
+		}
+	}
+
+	public static class CriticalModule extends Module {
+		private static final double MAX_RANGE = 4.2;
+		private int jumpCooldown = 0;
+
+		public CriticalModule() {
+			super("Critical", Category.COMBAT, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null || mc.gameMode == null) {
+				return;
+			}
+
+			if (jumpCooldown > 0) {
+				jumpCooldown--;
+			}
+
+			LivingEntity target = findNearestTarget(mc);
+			if (target == null) {
+				return;
+			}
+
+			boolean inLiquidOrClimbable = mc.player.isInWater()
+					|| mc.player.isInLava()
+					|| mc.player.onClimbable()
+					|| mc.player.isPassenger();
+
+			if (!inLiquidOrClimbable && mc.player.onGround() && jumpCooldown == 0 && mc.player.getAttackStrengthScale(0.5F) >= 0.75F) {
+				Vec3 vel = mc.player.getDeltaMovement();
+				mc.player.setDeltaMovement(vel.x, 0.32, vel.z);
+				mc.player.hasImpulse = true;
+				jumpCooldown = 6;
+			}
+
+			boolean isFalling = !mc.player.onGround() && mc.player.getDeltaMovement().y < 0.0;
+			if (mc.player.getAttackStrengthScale(0.5F) >= 0.90F && (isFalling || inLiquidOrClimbable)) {
+				mc.gameMode.attack(mc.player, target);
+				mc.player.swing(InteractionHand.MAIN_HAND);
+			}
+		}
+
+		private LivingEntity findNearestTarget(Minecraft mc) {
+			LivingEntity best = null;
+			double bestDist = MAX_RANGE;
+
+			for (Entity entity : mc.level.entitiesForRendering()) {
+				if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+					continue;
+				}
+				if (!living.isAlive() || !(living.getHealth() > 0)) {
+					continue;
+				}
+
+				double dist = mc.player.distanceTo(living);
+				if (dist <= bestDist) {
+					bestDist = dist;
+					best = living;
+				}
+			}
+
+			return best;
 		}
 	}
 
@@ -1023,7 +1950,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (mc.options.keyUse.isDown()) {
 				if (mc.getSingleplayerServer() != null) {
@@ -1063,7 +1992,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (mc.options.keyUse.isDown()) {
 				if (mc.getSingleplayerServer() != null) {
@@ -1149,7 +2080,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onRender2D(GuiGraphics g) {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			int screenWidth = mc.getWindow().getGuiScaledWidth();
 			int mapX = screenWidth - MAP_SIZE - 10;
@@ -1197,8 +2130,12 @@ public class MyClient implements ClientModInitializer {
 
 			double scale = 1.1;
 			for (Entity entity : mc.level.entitiesForRendering()) {
-				if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
-				if (!living.isAlive()) continue;
+				if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+					continue;
+				}
+				if (!living.isAlive()) {
+					continue;
+				}
 
 				double dx = entity.getX() - mc.player.getX();
 				double dz = entity.getZ() - mc.player.getZ();
@@ -1207,7 +2144,9 @@ public class MyClient implements ClientModInitializer {
 				double rotY = (dx * sin - dz * cos) * scale;
 
 				int maxOffset = (MAP_SIZE / 2) - 4;
-				if (Math.abs(rotX) > maxOffset || Math.abs(rotY) > maxOffset) continue;
+				if (Math.abs(rotX) > maxOffset || Math.abs(rotY) > maxOffset) {
+					continue;
+				}
 
 				int dotX = (int) (centerX + rotX);
 				int dotY = (int) (centerY + rotY);
@@ -1235,199 +2174,398 @@ public class MyClient implements ClientModInitializer {
 		}
 	}
 
-	public static class HealthTagsModule extends Module {
-		private static final double AIM_MAX_DISTANCE = 48.0;
-		private static final double LIST_MAX_DISTANCE = 36.0;
+    public static class HealthTagsModule extends Module {
+        private static final double AIM_MAX_DISTANCE = 48.0;
+        private static final double LIST_MAX_DISTANCE = 36.0;
+        private static final double TRACK_MAX_DISTANCE = 48.0;
 
-		public HealthTagsModule() {
-			super("HealthTags", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
-		}
+        private static class DamagePop {
+            final int entityId;
+            final boolean isHeal;
+            final int amount;
+            final double x, y, z;
+            int age;
+            final int maxAge;
 
-		private LivingEntity findAimedLivingEntity(Minecraft mc, double maxDistance) {
-			if (mc.player == null || mc.level == null) return null;
+            DamagePop(int entityId, boolean isHeal, int amount, double x, double y, double z, int maxAge) {
+                this.entityId = entityId;
+                this.isHeal = isHeal;
+                this.amount = amount;
+                this.x = x;
+                this.y = y;
+                this.z = z;
+                this.age = 0;
+                this.maxAge = maxAge;
+            }
+        }
 
-			Vec3 eyePos = mc.player.getEyePosition(1.0F);
-			Vec3 look = mc.player.getLookAngle().normalize();
-			Vec3 rayEnd = eyePos.add(look.scale(maxDistance));
+        private final java.util.Map<Integer, Float> lastHpMap = new java.util.HashMap<>();
+        private final java.util.List<DamagePop> popups = new java.util.ArrayList<>();
 
-			net.minecraft.world.phys.BlockHitResult blockHit = mc.level.clip(
-					new net.minecraft.world.level.ClipContext(
-							eyePos,
-							rayEnd,
-							net.minecraft.world.level.ClipContext.Block.COLLIDER,
-							net.minecraft.world.level.ClipContext.Fluid.NONE,
-							mc.player
-					)
-			);
-			double maxAllowedDistSq = blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS
-					? eyePos.distanceToSqr(blockHit.getLocation())
-					: maxDistance * maxDistance;
+        public HealthTagsModule() {
+            super("HealthTags", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+        }
 
-			LivingEntity bestTarget = null;
-			double bestDistSq = maxAllowedDistSq;
+        private void spawnPopup(LivingEntity living, boolean isHeal, float rawDelta) {
+            int intDelta = Math.round(rawDelta);
+            if (intDelta <= 0) {
+	            return;
+            }
 
-			for (Entity entity : mc.level.entitiesForRendering()) {
-				if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
-				if (!living.isAlive() || living.isRemoved()) continue;
+            double spawnX = living.getX();
+            double spawnY = living.getY() + (living.getBbHeight() * 0.5);
+            double spawnZ = living.getZ();
 
-				AABB box = living.getBoundingBox().inflate(0.25);
-				java.util.Optional<Vec3> hitOpt = box.clip(eyePos, rayEnd);
-				if (hitOpt.isPresent()) {
-					double distSq = eyePos.distanceToSqr(hitOpt.get());
-					if (distSq < bestDistSq) {
-						bestDistSq = distSq;
-						bestTarget = living;
-					}
-				}
-			}
+            popups.add(new DamagePop(living.getId(), isHeal, intDelta, spawnX, spawnY, spawnZ, 24));
+        }
 
-			return bestTarget;
-		}
+        @Override
+        public void onTick() {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.level == null) {
+                lastHpMap.clear();
+                popups.clear();
 
-		private ItemStack getTargetHeldItem(LivingEntity target) {
-			ItemStack mainHand = target.getMainHandItem();
-			if (!mainHand.isEmpty()) {
-				return mainHand;
-			}
-			ItemStack offHand = target.getOffhandItem();
-			if (!offHand.isEmpty()) {
-				return offHand;
-			}
-			return ItemStack.EMPTY;
-		}
+                return;
+            }
 
-		private String buildHeldItemText(ItemStack stack) {
-			if (stack == null || stack.isEmpty()) return "";
+            java.util.Set<Integer> seenIds = new java.util.HashSet<>();
 
-			String itemName = stack.getHoverName().getString();
-			int count = stack.getCount();
-			String countSuffix = count > 1 ? " x" + count : "";
+            for (Entity entity : mc.level.entitiesForRendering()) {
+                if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+                    continue;
+                }
+                if (!living.isAlive() || living.isRemoved()) {
+                    continue;
+                }
+                if (mc.player.distanceTo(living) > TRACK_MAX_DISTANCE) {
+                    continue;
+                }
 
-			net.minecraft.world.item.enchantment.ItemEnchantments enchants = stack.getEnchantments();
-			java.util.List<String> enchList = new java.util.ArrayList<>();
-			for (var entry : enchants.entrySet()) {
-				String fullName = net.minecraft.world.item.enchantment.Enchantment
-						.getFullname(entry.getKey(), entry.getIntValue())
-						.getString();
-				enchList.add(fullName);
-			}
+                int id = living.getId();
+                seenIds.add(id);
 
-			if (enchList.isEmpty()) {
-				return String.format("§eItem: §f%s%s", itemName, countSuffix);
-			}
+                float currentHp = Math.max(0.0F, living.getHealth());
+                Float prevHp = lastHpMap.put(id, currentHp);
 
-			return String.format("§eItem: §f%s%s §b[%s]",
-					itemName, countSuffix, String.join(", ", enchList));
-		}
+                if (prevHp != null) {
+                    float diff = currentHp - prevHp;
+                    if (diff < -0.25F) {
+                        spawnPopup(living, false, -diff);
+                    } else if (diff > 0.25F) {
+                        spawnPopup(living, true, diff);
+                    }
+                }
+            }
 
-		@Override
-		public void onRender2D(GuiGraphics g) {
-			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+            lastHpMap.keySet().removeIf(id -> !seenIds.contains(id));
 
-			int screenWidth = mc.getWindow().getGuiScaledWidth();
-			int screenHeight = mc.getWindow().getGuiScaledHeight();
+            java.util.Iterator<DamagePop> it = popups.iterator();
+            while (it.hasNext()) {
+                DamagePop pop = it.next();
+                pop.age++;
+                if (pop.age >= pop.maxAge) {
+                    it.remove();
+                }
+            }
+        }
 
-			LivingEntity target = findAimedLivingEntity(mc, AIM_MAX_DISTANCE);
-			if (target == null && mc.crosshairPickEntity instanceof LivingEntity picked && picked.isAlive()) {
-				target = picked;
-			}
+        private Vec3 projectToScreen(Minecraft mc, double worldX, double worldY, double worldZ, float partialTick) {
+            net.minecraft.client.Camera camera = mc.gameRenderer.getMainCamera();
+            Vec3 camPos = camera.getPosition();
 
-			if (target != null && target.isAlive()) {
-				float hp = target.getHealth();
-				float maxHp = Math.max(1.0F, target.getMaxHealth());
-				float ratio = Math.min(1.0F, Math.max(0.0F, hp / maxHp));
+            double dx = worldX - camPos.x;
+            double dy = worldY - camPos.y;
+            double dz = worldZ - camPos.z;
 
-				java.util.Collection<MobEffectInstance> effects = target.getActiveEffects();
-				if (mc.getSingleplayerServer() != null) {
-					ServerPlayer sp = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-					if (sp != null) {
-						Entity serverEntity = sp.serverLevel().getEntity(target.getId());
-						if (serverEntity instanceof LivingEntity serverLiving) {
-							effects = serverLiving.getActiveEffects();
-						}
-					}
-				}
+            org.joml.Quaternionf camRotConj = new org.joml.Quaternionf(camera.rotation()).conjugate();
+            org.joml.Vector3f rel = new org.joml.Vector3f((float) dx, (float) dy, (float) dz);
+            rel.rotate(camRotConj);
 
-				StringBuilder statusBuilder = new StringBuilder();
-				for (MobEffectInstance effect : effects) {
-					String effectName = effect.getEffect().value().getDisplayName().getString();
-					int amplifier = effect.getAmplifier() + 1;
-					double secondsLeft = effect.getDuration() / 20.0;
-					String color = effect.getEffect().value().isBeneficial() ? "§b" : "§d";
-					statusBuilder.append(String.format("%s[%s %d: %.1fs] ", color, effectName, amplifier, secondsLeft));
-				}
-				String statusText = statusBuilder.toString().trim();
-				boolean hasEffects = !statusText.isEmpty();
+            if (rel.z >= -0.05F) {
+                return null;
+            }
 
-				ItemStack heldItem = getTargetHeldItem(target);
-				String itemText = buildHeldItemText(heldItem);
-				boolean hasItem = !itemText.isEmpty();
+            double fovDeg = mc.options.fov().get();
+            double fovRad = Math.toRadians(fovDeg);
+            double halfTan = Math.tan(fovRad / 2.0);
+            double aspect = (double) mc.getWindow().getWidth() / Math.max(1, mc.getWindow().getHeight());
 
-				String headerText = String.format("§f%s §7(%.1f/%.0f) §8[%.1fm]",
-						target.getName().getString(), hp, maxHp, mc.player.distanceTo(target));
+            double distForward = -rel.z;
+            double ndcX = (rel.x / (distForward * halfTan * aspect));
+            double ndcY = (rel.y / (distForward * halfTan));
 
-				int maxLineWidth = mc.font.width(headerText);
-				if (hasItem) {
-					maxLineWidth = Math.max(maxLineWidth, mc.font.width(itemText));
-				}
-				if (hasEffects) {
-					maxLineWidth = Math.max(maxLineWidth, mc.font.width(statusText));
-				}
+            int guiW = mc.getWindow().getGuiScaledWidth();
+            int guiH = mc.getWindow().getGuiScaledHeight();
 
-				int hudW = Math.max(115, maxLineWidth + 12);
-				int hudH = 25 + (hasItem ? 11 : 0) + (hasEffects ? 11 : 0);
-				int hudX = (screenWidth / 2) + 12;
-				int hudY = (screenHeight / 2) + 12;
+            double screenX = (ndcX * 0.5 + 0.5) * guiW;
+            double screenY = (-ndcY * 0.5 + 0.5) * guiH;
 
-				g.fill(hudX, hudY, hudX + hudW, hudY + hudH, 0xCC10141A);
-				g.fill(hudX, hudY, hudX + hudW, hudY + 1, 0xFF00FFFF);
+            return new Vec3(screenX, screenY, distForward);
+        }
 
-				g.drawString(mc.font, headerText, hudX + 5, hudY + 4, 0xFFFFFF);
+        private void renderDamagePopups(Minecraft mc, GuiGraphics g, float partialTick) {
+            if (popups.isEmpty()) {
+	            return;
+            }
 
-				int barX = hudX + 5;
-				int barY = hudY + 16;
-				int barMaxW = hudW - 10;
-				g.fill(barX, barY, barX + barMaxW, barY + 5, 0xFF333333);
+            for (DamagePop pop : popups) {
+                float t = Math.min(1.0F, Math.max(0.0F, (pop.age + partialTick) / (float) pop.maxAge));
 
-				int barColor = ratio > 0.5F ? 0xFF22EE22 : (ratio > 0.25F ? 0xFFFFCC00 : 0xFFFF2222);
-				g.fill(barX, barY, barX + (int) (barMaxW * ratio), barY + 5, barColor);
+                float popSplit = 0.35F;
+                double worldOffsetY;
+                float animScale;
 
-				int nextTextY = hudY + 25;
-				if (hasItem) {
-					g.drawString(mc.font, itemText, hudX + 5, nextTextY, 0xFFFFFF);
-					nextTextY += 11;
-				}
-				if (hasEffects) {
-					g.drawString(mc.font, statusText, hudX + 5, nextTextY, 0xFFFFFF);
-				}
-			}
+                if (t < popSplit) {
+                    float u = t / popSplit;
+                    float easeOut = 1.0F - (1.0F - u) * (1.0F - u);
+                    worldOffsetY = 0.16 * easeOut;
+                    animScale = 0.35F + (0.95F * easeOut);
+                } else {
+                    float d = (t - popSplit) / (1.0F - popSplit);
+                    float easeIn = d * d;
+                    worldOffsetY = 0.16 - (0.34 * easeIn);
+                    animScale = Math.max(0.05F, 1.30F * (1.0F - 0.88F * easeIn));
+                }
 
-			java.util.List<LivingEntity> nearby = new java.util.ArrayList<>();
-			for (Entity entity : mc.level.entitiesForRendering()) {
-				if (entity == mc.player || !(entity instanceof LivingEntity living)) continue;
-				if (!living.isAlive() || living.isRemoved()) continue;
-				if (mc.player.distanceTo(living) > LIST_MAX_DISTANCE) continue;
-				nearby.add(living);
-			}
-			nearby.sort(java.util.Comparator.comparingDouble(e -> mc.player.distanceToSqr(e)));
+                Vec3 projected = projectToScreen(mc, pop.x, pop.y + worldOffsetY, pop.z, partialTick);
+                if (projected == null) continue;
 
-			int listY = screenHeight - 60;
-			int count = 0;
-			for (LivingEntity living : nearby) {
-				if (count >= 5) break;
+                float alpha = t < 0.5F ? 1.0F : Math.max(0.0F, 1.0F - ((t - 0.5F) / 0.5F));
+                int alphaInt = Math.max(15, Math.min(255, (int) (alpha * 255.0F)));
 
-				float hp = living.getHealth();
-				String hpColor = hp > (living.getMaxHealth() * 0.5F) ? "§a" : "§c";
-				String line = String.format("§7[%.1fm] §f%s %s%.1f❤",
-						mc.player.distanceTo(living), living.getName().getString(), hpColor, hp);
+                int baseRgb = pop.isHeal ? 0x44FF44 : 0xFFAA00;
+                int argb = (alphaInt << 24) | baseRgb;
 
-				g.drawString(mc.font, line, 10, listY, 0xFFFFFF);
-				listY -= 11;
-				count++;
-			}
-		}
-	}
+                String text = pop.isHeal
+                        ? String.format("+%d", pop.amount)
+                        : String.format("-%d", pop.amount);
+
+                float distScale = (float) Math.max(0.65, Math.min(1.15, 8.0 / Math.max(2.0, projected.z)));
+                float finalScale = animScale * distScale;
+
+                g.pose().pushPose();
+                g.pose().translate((float) projected.x, (float) projected.y, 0.0F);
+                g.pose().scale(finalScale, finalScale, 1.0F);
+
+                int textW = mc.font.width(text);
+                g.drawString(mc.font, text, -(textW / 2), 0, argb, true);
+
+                g.pose().popPose();
+            }
+        }
+
+        private LivingEntity findAimedLivingEntity(Minecraft mc, double maxDistance) {
+            if (mc.player == null || mc.level == null) {
+	            return null;
+            }
+
+            Vec3 eyePos = mc.player.getEyePosition(1.0F);
+            Vec3 look = mc.player.getLookAngle().normalize();
+            Vec3 rayEnd = eyePos.add(look.scale(maxDistance));
+
+            net.minecraft.world.phys.BlockHitResult blockHit = mc.level.clip(
+                    new net.minecraft.world.level.ClipContext(
+                            eyePos,
+                            rayEnd,
+                            net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                            net.minecraft.world.level.ClipContext.Fluid.NONE,
+                            mc.player
+                    )
+            );
+            double maxAllowedDistSq = blockHit.getType() != net.minecraft.world.phys.HitResult.Type.MISS
+                    ? eyePos.distanceToSqr(blockHit.getLocation())
+                    : maxDistance * maxDistance;
+
+            LivingEntity bestTarget = null;
+            double bestDistSq = maxAllowedDistSq;
+
+            for (Entity entity : mc.level.entitiesForRendering()) {
+                if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+                    continue;
+                }
+                if (!living.isAlive() || living.isRemoved()) {
+                    continue;
+                }
+
+                AABB box = living.getBoundingBox().inflate(0.25);
+                java.util.Optional<Vec3> hitOpt = box.clip(eyePos, rayEnd);
+                if (hitOpt.isPresent()) {
+                    double distSq = eyePos.distanceToSqr(hitOpt.get());
+                    if (distSq < bestDistSq) {
+                        bestDistSq = distSq;
+                        bestTarget = living;
+                    }
+                }
+            }
+
+            return bestTarget;
+        }
+
+        private ItemStack getTargetHeldItem(LivingEntity target) {
+            ItemStack mainHand = target.getMainHandItem();
+            if (!mainHand.isEmpty()) {
+                return mainHand;
+            }
+            ItemStack offHand = target.getOffhandItem();
+            if (!offHand.isEmpty()) {
+                return offHand;
+            }
+            return ItemStack.EMPTY;
+        }
+
+        private String buildHeldItemText(ItemStack stack) {
+            if (stack == null || stack.isEmpty()) {
+	            return "";
+            }
+
+            String itemName = stack.getHoverName().getString();
+            int count = stack.getCount();
+            String countSuffix = count > 1 ? " x" + count : "";
+
+            net.minecraft.world.item.enchantment.ItemEnchantments enchants = stack.getEnchantments();
+            java.util.List<String> enchList = new java.util.ArrayList<>();
+            for (var entry : enchants.entrySet()) {
+                String fullName = net.minecraft.world.item.enchantment.Enchantment
+                        .getFullname(entry.getKey(), entry.getIntValue())
+                        .getString();
+                enchList.add(fullName);
+            }
+
+            if (enchList.isEmpty()) {
+                return String.format("§eItem: §f%s%s", itemName, countSuffix);
+            }
+
+            return String.format("§eItem: §f%s%s §b[%s]",
+                    itemName, countSuffix, String.join(", ", enchList));
+        }
+
+        @Override
+        public void onRender2D(GuiGraphics g) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.level == null) {
+                return;
+            }
+
+            float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(true);
+
+            renderDamagePopups(mc, g, partialTick);
+
+            int screenWidth = mc.getWindow().getGuiScaledWidth();
+            int screenHeight = mc.getWindow().getGuiScaledHeight();
+
+            LivingEntity target = findAimedLivingEntity(mc, AIM_MAX_DISTANCE);
+            if (target == null && mc.crosshairPickEntity instanceof LivingEntity picked && picked.isAlive()) {
+                target = picked;
+            }
+
+            if (target != null && target.isAlive()) {
+                float hp = target.getHealth();
+                float maxHp = Math.max(1.0F, target.getMaxHealth());
+                int hpInt = Math.round(hp);
+                int maxHpInt = Math.round(maxHp);
+                float ratio = Math.min(1.0F, Math.max(0.0F, hp / maxHp));
+
+                java.util.Collection<MobEffectInstance> effects = target.getActiveEffects();
+                if (mc.getSingleplayerServer() != null) {
+                    ServerPlayer sp = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
+                    if (sp != null) {
+                        Entity serverEntity = sp.serverLevel().getEntity(target.getId());
+                        if (serverEntity instanceof LivingEntity serverLiving) {
+                            effects = serverLiving.getActiveEffects();
+                        }
+                    }
+                }
+
+                StringBuilder statusBuilder = new StringBuilder();
+                for (MobEffectInstance effect : effects) {
+                    String effectName = effect.getEffect().value().getDisplayName().getString();
+                    int amplifier = effect.getAmplifier() + 1;
+                    double secondsLeft = effect.getDuration() / 20.0;
+                    String color = effect.getEffect().value().isBeneficial() ? "§b" : "§d";
+                    statusBuilder.append(String.format("%s[%s %d: %.1fs] ", color, effectName, amplifier, secondsLeft));
+                }
+                String statusText = statusBuilder.toString().trim();
+                boolean hasEffects = !statusText.isEmpty();
+
+                ItemStack heldItem = getTargetHeldItem(target);
+                String itemText = buildHeldItemText(heldItem);
+                boolean hasItem = !itemText.isEmpty();
+
+                String headerText = String.format("§f%s §7(%d/%d) §8[%.1fm]",
+                        target.getName().getString(), hpInt, maxHpInt, mc.player.distanceTo(target));
+
+                int maxLineWidth = mc.font.width(headerText);
+                if (hasItem) {
+                    maxLineWidth = Math.max(maxLineWidth, mc.font.width(itemText));
+                }
+                if (hasEffects) {
+                    maxLineWidth = Math.max(maxLineWidth, mc.font.width(statusText));
+                }
+
+                int hudW = Math.max(115, maxLineWidth + 12);
+                int hudH = 25 + (hasItem ? 11 : 0) + (hasEffects ? 11 : 0);
+                int hudX = (screenWidth / 2) + 12;
+                int hudY = (screenHeight / 2) + 12;
+
+                g.fill(hudX, hudY, hudX + hudW, hudY + hudH, 0xCC10141A);
+                g.fill(hudX, hudY, hudX + hudW, hudY + 1, 0xFF00FFFF);
+
+                g.drawString(mc.font, headerText, hudX + 5, hudY + 4, 0xFFFFFF);
+
+                int barX = hudX + 5;
+                int barY = hudY + 16;
+                int barMaxW = hudW - 10;
+                g.fill(barX, barY, barX + barMaxW, barY + 5, 0xFF333333);
+
+                int barColor = ratio > 0.5F ? 0xFF22EE22 : (ratio > 0.25F ? 0xFFFFCC00 : 0xFFFF2222);
+                g.fill(barX, barY, barX + (int) (barMaxW * ratio), barY + 5, barColor);
+
+                int nextTextY = hudY + 25;
+                if (hasItem) {
+                    g.drawString(mc.font, itemText, hudX + 5, nextTextY, 0xFFFFFF);
+                    nextTextY += 11;
+                }
+                if (hasEffects) {
+                    g.drawString(mc.font, statusText, hudX + 5, nextTextY, 0xFFFFFF);
+                }
+            }
+
+            java.util.List<LivingEntity> nearby = new java.util.ArrayList<>();
+            for (Entity entity : mc.level.entitiesForRendering()) {
+                if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+                    continue;
+                }
+                if (!living.isAlive() || living.isRemoved()) {
+                    continue;
+                }
+                if (mc.player.distanceTo(living) > LIST_MAX_DISTANCE) {
+                    continue;
+                }
+
+                nearby.add(living);
+            }
+            nearby.sort(java.util.Comparator.comparingDouble(e -> mc.player.distanceToSqr(e)));
+
+            int listY = screenHeight - 60;
+            int count = 0;
+            for (LivingEntity living : nearby) {
+                if (count >= 5) {
+                    break;
+                }
+
+                float hp = living.getHealth();
+                int hpInt = Math.round(hp);
+                String hpColor = hp > (living.getMaxHealth() * 0.5F) ? "§a" : "§c";
+                String line = String.format("§7[%.1fm] §f%s %s%d❤",
+                        mc.player.distanceTo(living), living.getName().getString(), hpColor, hpInt);
+
+                g.drawString(mc.font, line, 10, listY, 0xFFFFFF);
+                listY -= 11;
+                count++;
+            }
+        }
+    }
 
 	public static class AreaMinerModule extends Module {
 		public static boolean isBreaking = false;
@@ -1451,9 +2589,16 @@ public class MyClient implements ClientModInitializer {
 		}
 
 		@Override
+		public Scope getScope() {
+			return Scope.SINGLE;
+		}
+
+		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (spawnCooldown > 0) {
 				spawnCooldown--;
@@ -1498,13 +2643,18 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
-			if (mc.player.isShiftKeyDown()) return;
+			if (mc.player.isShiftKeyDown()) {
+				return;
+			}
 
 			if (mc.player.isInWater() || mc.player.isInLava()) {
 				Vec3 vel = mc.player.getDeltaMovement();
 				mc.player.setDeltaMovement(vel.x, 0.11, vel.z);
+
 				return;
 			}
 
@@ -1536,8 +2686,12 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null) return;
-			if (mc.player.isFallFlying() || mc.player.isCreative() || mc.player.isSpectator()) return;
+			if (mc.player == null) {
+				return;
+			}
+			if (mc.player.isFallFlying() || mc.player.isCreative() || mc.player.isSpectator()) {
+				return;
+			}
 
 			if (!mc.player.onGround() && mc.player.getDeltaMovement().y < -0.08) {
 				mc.player.fallDistance = 0.0F;
@@ -1553,7 +2707,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null) return;
+			if (mc.player == null) {
+				return;
+			}
 
 			AttributeInstance stepAttr = mc.player.getAttribute(Attributes.STEP_HEIGHT);
 			if (stepAttr != null && stepAttr.getBaseValue() != 1.25) {
@@ -1584,7 +2740,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.player.isShiftKeyDown()) return;
+			if (mc.player == null || mc.player.isShiftKeyDown()) {
+				return;
+			}
 
 			float forward = mc.player.zza;
 			float strafe = mc.player.xxa;
@@ -1593,6 +2751,7 @@ public class MyClient implements ClientModInitializer {
 				if (mc.player.onGround()) {
 					mc.player.setDeltaMovement(0.0, mc.player.getDeltaMovement().y, 0.0);
 				}
+
 				return;
 			}
 
@@ -1616,7 +2775,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null) return;
+			if (mc.player == null) {
+				return;
+			}
 
 			if (mc.player.horizontalCollision && !mc.player.isShiftKeyDown()) {
 				Vec3 vel = mc.player.getDeltaMovement();
@@ -1633,7 +2794,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null) return;
+			if (mc.player == null) {
+				return;
+			}
 
 			AttributeInstance jumpAttr = mc.player.getAttribute(Attributes.JUMP_STRENGTH);
 			if (jumpAttr != null && jumpAttr.getBaseValue() != 1.05) {
@@ -1666,7 +2829,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null || mc.getConnection() == null) return;
+			if (mc.player == null || mc.level == null || mc.getConnection() == null) {
+				return;
+			}
 
 			if (interactCooldown > 0) {
 				interactCooldown--;
@@ -1682,7 +2847,8 @@ public class MyClient implements ClientModInitializer {
 					BlockPos targetPos = BlockPos.containing(checkVec.x, checkVec.y, checkVec.z);
 					Block block = mc.level.getBlockState(targetPos).getBlock();
 
-					boolean isTargetContainerOrTnt = (block instanceof ChestBlock) ||
+					boolean isTargetContainerOrTnt =
+							(block instanceof ChestBlock) ||
 							(block instanceof BarrelBlock) ||
 							(block instanceof TntBlock) ||
 							(block instanceof LeverBlock) ||
@@ -1692,10 +2858,10 @@ public class MyClient implements ClientModInitializer {
 						interactCooldown = 6;
 
 						BlockHitResult fakeHit = new BlockHitResult(
-								checkVec,
-								Direction.UP,
-								targetPos,
-								false
+                                checkVec,
+                                Direction.UP,
+                                targetPos,
+                                false
 						);
 
 						mc.getConnection().send(new ServerboundUseItemOnPacket(
@@ -1703,7 +2869,9 @@ public class MyClient implements ClientModInitializer {
 								fakeHit,
 								0
 						));
+
 						mc.player.swing(InteractionHand.MAIN_HAND);
+
 						break;
 					}
 				}
@@ -1775,50 +2943,49 @@ public class MyClient implements ClientModInitializer {
 		}
 	}
 
-	public static class DeflectModule extends Module {
-		public DeflectModule() {
-			super("Deflect", Category.COMBAT, GLFW.GLFW_KEY_UNKNOWN);
-		}
+    public static class DeflectModule extends Module {
+        private static final double RANGE = 4.5;
 
-		@Override
-		public void onTick() {
-			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+        public DeflectModule() {
+            super("Deflect", Category.COMBAT, GLFW.GLFW_KEY_UNKNOWN);
+        }
 
-			if (mc.getSingleplayerServer() != null) {
-				ServerPlayer serverPlayer = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
-				if (serverPlayer != null) {
-					ServerLevel serverLevel = serverPlayer.serverLevel();
-					AABB shieldBox = serverPlayer.getBoundingBox().inflate(4.5);
+        @Override
+        public void onTick() {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.level == null || mc.gameMode == null) {
+	            return;
+            }
 
-					for (Projectile proj : serverLevel.getEntitiesOfClass(Projectile.class, shieldBox)) {
-						if (proj.getOwner() == serverPlayer) continue;
+            AABB box = mc.player.getBoundingBox().inflate(RANGE);
+            net.minecraft.world.phys.Vec3 eyePos = mc.player.getEyePosition();
 
-						if (!(proj.getDeltaMovement().lengthSqr() > 0.01)) continue;
+            for (net.minecraft.world.entity.Entity entity : mc.level.entitiesForRendering()) {
+                if (!(entity instanceof net.minecraft.world.entity.projectile.Projectile proj)) {
+	                continue;
+                }
+                if (!proj.isAlive()) {
+	                continue;
+                }
 
-						Entity originalShooter = proj.getOwner();
-						proj.setOwner(serverPlayer);
+                net.minecraft.world.phys.Vec3 vel = proj.getDeltaMovement();
+                if (vel.lengthSqr() < 0.01) {
+	                continue;
+                }
 
-						Vec3 reflectDir;
-						if (originalShooter != null && originalShooter.isAlive()) {
-							Vec3 shooterCenter = originalShooter.position().add(0, originalShooter.getBbHeight() / 2.0, 0);
-							reflectDir = shooterCenter.subtract(proj.position()).normalize();
-						} else {
-							reflectDir = serverPlayer.getLookAngle().normalize();
-						}
+                double distBefore = proj.position().distanceToSqr(eyePos);
+                double distAfter = proj.position().add(vel).distanceToSqr(eyePos);
+                if (distAfter >= distBefore) {
+	                continue;
+                }
 
-						proj.shoot(reflectDir.x, reflectDir.y, reflectDir.z, 2.5F, 0.0F);
-						proj.hasImpulse = true;
+                mc.gameMode.attack(mc.player, proj);
+                mc.player.swing(InteractionHand.MAIN_HAND);
 
-						serverLevel.playSound(null, serverPlayer.blockPosition(),
-								net.minecraft.sounds.SoundEvents.SHIELD_BLOCK,
-								net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 1.2F);
-						mc.player.swing(InteractionHand.MAIN_HAND);
-					}
-				}
-			}
-		}
-	}
+                break;
+            }
+        }
+    }
 
 	public static class FullbrightModule extends Module {
 		private Double savedGamma = null;
@@ -1863,7 +3030,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (castCooldown > 0) {
 				castCooldown--;
@@ -1880,7 +3049,9 @@ public class MyClient implements ClientModInitializer {
 
 					server.execute(() -> {
 						ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
-						if (serverPlayer == null) return;
+						if (serverPlayer == null) {
+							return;
+						}
 
 						ServerLevel serverLevel = serverPlayer.serverLevel();
 						serverLevel.playSound(null, serverPlayer.blockPosition(),
@@ -1905,13 +3076,17 @@ public class MyClient implements ClientModInitializer {
 							);
 
 							for (LivingEntity target : serverLevel.getEntitiesOfClass(LivingEntity.class, coneBox)) {
-								if (target == serverPlayer || !target.isAlive() || target.isRemoved()) continue;
+								if (target == serverPlayer || !target.isAlive() || target.isRemoved()) {
+									continue;
+								}
 								hitEntities.add(target);
 							}
 						}
 
 						for (LivingEntity target : hitEntities) {
-							if (!target.isAlive() || target.isRemoved()) continue;
+							if (!target.isAlive() || target.isRemoved()) {
+								continue;
+							}
 
 							target.hurtServer(serverLevel, serverLevel.damageSources().freeze(), 10.0F);
 
@@ -1922,8 +3097,14 @@ public class MyClient implements ClientModInitializer {
 							target.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 4));
 
 							serverLevel.sendParticles(ParticleTypes.SNOWFLAKE, target.getX(), target.getEyeY(), target.getZ(), 20, 0.4, 0.5, 0.4, 0.08);
-							serverLevel.playSound(null, target.blockPosition(),
-									SoundEvents.GLASS_BREAK, SoundSource.PLAYERS, 1.0F, 1.8F);
+							serverLevel.playSound(
+									null,
+									target.blockPosition(),
+									SoundEvents.GLASS_BREAK,
+									SoundSource.PLAYERS,
+									1.0F,
+									1.8F
+							);
 						}
 					});
 				}
@@ -1948,7 +3129,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (castCooldown > 0) {
 				castCooldown--;
@@ -1965,7 +3148,9 @@ public class MyClient implements ClientModInitializer {
 
 					server.execute(() -> {
 						ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
-						if (serverPlayer == null) return;
+						if (serverPlayer == null) {
+							return;
+						}
 
 						ServerLevel serverLevel = serverPlayer.serverLevel();
 						serverLevel.playSound(null, serverPlayer.blockPosition(),
@@ -1990,7 +3175,9 @@ public class MyClient implements ClientModInitializer {
 							);
 
 							for (LivingEntity target : serverLevel.getEntitiesOfClass(LivingEntity.class, coneBox)) {
-								if (target == serverPlayer || !target.isAlive() || target.isRemoved()) continue;
+								if (target == serverPlayer || !target.isAlive() || target.isRemoved()) {
+									continue;
+								}
 								hitEntities.add(target);
 							}
 						}
@@ -2001,7 +3188,9 @@ public class MyClient implements ClientModInitializer {
 								net.minecraft.core.particles.ColorParticleOption.create(ParticleTypes.ENTITY_EFFECT, 0xFFCD5CAB);
 
 						for (LivingEntity target : hitEntities) {
-							if (!target.isAlive() || target.isRemoved()) continue;
+							if (!target.isAlive() || target.isRemoved()) {
+								continue;
+							}
 
 							target.hurtServer(serverLevel, serverLevel.damageSources().magic(), 20.0F);
 
@@ -2010,8 +3199,7 @@ public class MyClient implements ClientModInitializer {
 
 							serverLevel.sendParticles(poisonParticle, target.getX(), target.getEyeY(), target.getZ(), 25, 0.5, 0.5, 0.5, 0.1);
 							serverLevel.sendParticles(regenParticle, target.getX(), target.getEyeY(), target.getZ(), 25, 0.5, 0.5, 0.5, 0.1);
-							serverLevel.playSound(null, target.blockPosition(),
-									SoundEvents.SPLASH_POTION_BREAK, SoundSource.PLAYERS, 1.0F, 1.0F);
+							serverLevel.playSound(null, target.blockPosition(), SoundEvents.SPLASH_POTION_BREAK, SoundSource.PLAYERS, 1.0F, 1.0F);
 						}
 					});
 				}
@@ -2055,7 +3243,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (globalCooldown > 0) globalCooldown--;
 			if (burstInterval > 0) burstInterval--;
@@ -2075,7 +3265,9 @@ public class MyClient implements ClientModInitializer {
 			}
 
 			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
-			if (server == null) return;
+			if (server == null) {
+				return;
+			}
 
 			java.util.UUID playerId = mc.player.getUUID();
 			Vec3 eyePos = mc.player.getEyePosition();
@@ -2111,8 +3303,12 @@ public class MyClient implements ClientModInitializer {
 								exp.lastKnownPos.x + 4.0, exp.lastKnownPos.y + 3.0, exp.lastKnownPos.z + 4.0
 						);
 						for (LivingEntity victim : exp.level.getEntitiesOfClass(LivingEntity.class, blastBox)) {
-							if (!victim.isAlive() || victim.isRemoved()) continue;
-							if (victim.getUUID().equals(exp.casterId)) continue;
+							if (!victim.isAlive() || victim.isRemoved()) {
+								continue;
+							}
+							if (victim.getUUID().equals(exp.casterId)) {
+								continue;
+							}
 
 							victim.hurtServer(exp.level, exp.level.damageSources().explosion(casterEntity, casterEntity), 30.0F);
 
@@ -2157,8 +3353,12 @@ public class MyClient implements ClientModInitializer {
 							);
 
 							for (LivingEntity target : serverLevel.getEntitiesOfClass(LivingEntity.class, coneBox)) {
-								if (target == serverPlayer || !target.isAlive() || target.isRemoved()) continue;
-								if (hitEntities.contains(target)) continue;
+								if (target == serverPlayer || !target.isAlive() || target.isRemoved()) {
+									continue;
+								}
+								if (hitEntities.contains(target)) {
+									continue;
+								}
 
 								hitEntities.add(target);
 
@@ -2209,7 +3409,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (castCooldown > 0) {
 				castCooldown--;
@@ -2222,7 +3424,9 @@ public class MyClient implements ClientModInitializer {
 			}
 
 			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
-			if (server == null) return;
+			if (server == null) {
+				return;
+			}
 
 			java.util.UUID playerId = mc.player.getUUID();
 			float xRot = mc.player.getXRot();
@@ -2261,10 +3465,14 @@ public class MyClient implements ClientModInitializer {
 						);
 
 						for (LivingEntity victim : bomb.level.getEntitiesOfClass(LivingEntity.class, vortexBox)) {
-							if (!victim.isAlive() || victim.isRemoved()) continue;
+							if (!victim.isAlive() || victim.isRemoved()) {
+								continue;
+							}
 
 							double dist = victim.position().distanceTo(center);
-							if (dist > pullRadius) continue;
+							if (dist > pullRadius) {
+								continue;
+							}
 
 							if (!victim.getUUID().equals(bomb.casterId)) {
 								victim.hurtServer(bomb.level, bomb.level.damageSources().magic(), 20.0F);
@@ -2323,7 +3531,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (castCooldown > 0) {
 				castCooldown--;
@@ -2336,7 +3546,9 @@ public class MyClient implements ClientModInitializer {
 			}
 
 			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
-			if (server == null) return;
+			if (server == null) {
+				return;
+			}
 
 			java.util.UUID playerId = mc.player.getUUID();
 			float baseXRot = mc.player.getXRot();
@@ -2345,7 +3557,9 @@ public class MyClient implements ClientModInitializer {
 
 			server.execute(() -> {
 				ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
-				if (serverPlayer == null) return;
+				if (serverPlayer == null) {
+					return;
+				}
 
 				ServerLevel serverLevel = serverPlayer.serverLevel();
 
@@ -2375,13 +3589,17 @@ public class MyClient implements ClientModInitializer {
 						java.util.Set<LivingEntity> hitTargets = new java.util.LinkedHashSet<>();
 						AABB hitCheckBox = arrow.getBoundingBox().inflate(0.9);
 						for (LivingEntity target : serverLevel.getEntitiesOfClass(LivingEntity.class, hitCheckBox)) {
-							if (target == serverPlayer || !target.isAlive() || target.isRemoved()) continue;
+							if (target == serverPlayer || !target.isAlive() || target.isRemoved()) {
+								continue;
+							}
 							hitTargets.add(target);
 						}
 
 						Vec3 arrowDir = arrow.getDeltaMovement().normalize();
 						for (LivingEntity target : hitTargets) {
-							if (!target.isAlive() || target.isRemoved()) continue;
+							if (!target.isAlive() || target.isRemoved()) {
+								continue;
+							}
 
 							target.invulnerableTime = 0;
 							target.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 100, 0));
@@ -2474,7 +3692,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (castCooldown > 0) {
 				castCooldown--;
@@ -2487,7 +3707,9 @@ public class MyClient implements ClientModInitializer {
 			}
 
 			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
-			if (server == null) return;
+			if (server == null) {
+				return;
+			}
 
 			java.util.UUID playerId = mc.player.getUUID();
 			float xRot = mc.player.getXRot();
@@ -2540,10 +3762,14 @@ public class MyClient implements ClientModInitializer {
 					);
 
 					for (LivingEntity victim : hole.level.getEntitiesOfClass(LivingEntity.class, gravityBox)) {
-						if (!victim.isAlive() || victim.isRemoved()) continue;
+						if (!victim.isAlive() || victim.isRemoved()) {
+							continue;
+						}
 
 						double dist = victim.position().distanceTo(c);
-						if (dist > singularityRadius) continue;
+						if (dist > singularityRadius) {
+							continue;
+						}
 
 						Vec3 pullDir = c.add(0, 1.0, 0).subtract(victim.position());
 						double pullSpeed = Math.min(1.6, 0.45 + (dist * 0.08));
@@ -2598,7 +3824,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null) return;
+			if (mc.player == null) {
+				return;
+			}
 
 			float forward = mc.player.zza;
 			float strafe = mc.player.xxa;
@@ -2639,7 +3867,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null || mc.gameMode == null) return;
+			if (mc.player == null || mc.level == null || mc.gameMode == null) {
+				return;
+			}
 
 			BlockPos belowPos = BlockPos.containing(mc.player.getX(), mc.player.getY() - 0.5, mc.player.getZ());
 
@@ -2681,7 +3911,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.gameMode == null) return;
+			if (mc.player == null || mc.gameMode == null) {
+				return;
+			}
 
 			if (mc.screen instanceof ContainerScreen containerScreen) {
 				if (stealDelay > 0) {
@@ -2713,7 +3945,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.gameMode == null) return;
+			if (mc.player == null || mc.gameMode == null) {
+				return;
+			}
 
 			if (mc.player.getAttackStrengthScale(0.5F) >= 0.95F) {
 				if (mc.crosshairPickEntity instanceof LivingEntity target && target.isAlive() && target != mc.player) {
@@ -2737,7 +3971,9 @@ public class MyClient implements ClientModInitializer {
 		public void toggle() {
 			super.toggle();
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null) return;
+			if (mc.player == null) {
+				return;
+			}
 
 			if (isEnabled()) {
 				startSoulPos = mc.player.position();
@@ -2759,13 +3995,19 @@ public class MyClient implements ClientModInitializer {
 
 		@Override
 		public void onRender3D(WorldRenderContext context) {
-			if (startSoulPos == null) return;
+			if (startSoulPos == null) {
+				return;
+			}
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null) return;
+			if (mc.player == null) {
+				return;
+			}
 
 			PoseStack poseStack = context.matrixStack();
 			Camera camera = context.camera();
-			if (poseStack == null || camera == null) return;
+			if (poseStack == null || camera == null) {
+				return;
+			}
 
 			Vec3 camPos = camera.getPosition();
 			Vec3 soulStart = startSoulPos.add(0, 1.0, 0).subtract(camPos);
@@ -2795,7 +4037,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.getConnection() == null) return;
+			if (mc.player == null || mc.getConnection() == null) {
+				return;
+			}
 
 			if (mc.player.isUsingItem() && mc.player.getUseItem().has(net.minecraft.core.component.DataComponents.FOOD)) {
 				if (mc.player.getTicksUsingItem() >= 2) {
@@ -2830,7 +4074,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (breakCooldown > 0) {
 				breakCooldown--;
@@ -2848,7 +4094,7 @@ public class MyClient implements ClientModInitializer {
 							ServerPlayer sp = mc.getSingleplayerServer().getPlayerList().getPlayer(mc.player.getUUID());
 							if (sp != null) {
 								ServerLevel serverLevel = sp.serverLevel();
-								serverLevel.setBlockAndUpdate(targetPos, Blocks.AIR.defaultBlockState());
+								serverLevel.setBlockAndUpdate(targetPos, AIR.defaultBlockState());
 								serverLevel.playSound(null, targetPos,
 										SoundEvents.GLASS_BREAK, SoundSource.BLOCKS, 1.0F, 1.3F);
 								serverLevel.sendParticles(ParticleTypes.CLOUD,
@@ -2913,20 +4159,26 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (castCooldown > 0) {
 				castCooldown--;
 			}
 
 			boolean wantsCast = mc.options.keyUse.isDown() && castCooldown == 0;
-			if (!wantsCast) return;
+			if (!wantsCast) {
+				return;
+			}
 
 			castCooldown = 18;
 			mc.player.swing(InteractionHand.MAIN_HAND);
 
 			net.minecraft.server.MinecraftServer server = mc.getSingleplayerServer();
-			if (server == null) return;
+			if (server == null) {
+				return;
+			}
 
 			java.util.UUID playerId = mc.player.getUUID();
 			Vec3 eyePos = mc.player.getEyePosition();
@@ -2934,7 +4186,9 @@ public class MyClient implements ClientModInitializer {
 
 			server.execute(() -> {
 				ServerPlayer serverPlayer = server.getPlayerList().getPlayer(playerId);
-				if (serverPlayer == null) return;
+				if (serverPlayer == null) {
+					return;
+				}
 
 				ServerLevel serverLevel = serverPlayer.serverLevel();
 				double maxRange = 45.0;
@@ -2974,7 +4228,9 @@ public class MyClient implements ClientModInitializer {
 					LivingEntity found = null;
 					double closestDist = Double.MAX_VALUE;
 					for (LivingEntity candidate : serverLevel.getEntitiesOfClass(LivingEntity.class, checkBox)) {
-						if (candidate == serverPlayer || !candidate.isAlive() || candidate.isRemoved()) continue;
+						if (candidate == serverPlayer || !candidate.isAlive() || candidate.isRemoved()) {
+							continue;
+						}
 						double d = candidate.position().distanceToSqr(eyePos);
 						if (d < closestDist) {
 							closestDist = d;
@@ -2985,6 +4241,7 @@ public class MyClient implements ClientModInitializer {
 					if (found != null) {
 						hitTarget = found;
 						hitPoint = found.position().add(0, found.getBbHeight() * 0.5, 0);
+
 						break;
 					}
 				}
@@ -2994,8 +4251,7 @@ public class MyClient implements ClientModInitializer {
 				}
 
 				if (hitTarget != null) {
-					net.minecraft.world.entity.LightningBolt visualBolt =
-							new net.minecraft.world.entity.LightningBolt(net.minecraft.world.entity.EntityType.LIGHTNING_BOLT, serverLevel);
+					net.minecraft.world.entity.LightningBolt visualBolt = new net.minecraft.world.entity.LightningBolt(net.minecraft.world.entity.EntityType.LIGHTNING_BOLT, serverLevel);
 					visualBolt.setPos(hitTarget.getX(), hitTarget.getY(), hitTarget.getZ());
 					visualBolt.setVisualOnly(true);
 					serverLevel.addFreshEntity(visualBolt);
@@ -3030,7 +4286,9 @@ public class MyClient implements ClientModInitializer {
 		@Override
 		public void onTick() {
 			Minecraft mc = Minecraft.getInstance();
-			if (mc.player == null || mc.level == null) return;
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
 
 			if (mc.options.keyJump.isDown()) {
 				Vec3 vel = mc.player.getDeltaMovement();
@@ -3051,4 +4309,522 @@ public class MyClient implements ClientModInitializer {
 			super("SafeWalk", Category.MOVEMENT, GLFW.GLFW_KEY_UNKNOWN);
 		}
 	}
+
+	public static class DayModule extends Module {
+		public DayModule() {
+			super("Day", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.level instanceof net.minecraft.client.multiplayer.ClientLevel clientLevel) {
+				clientLevel.getLevelData().setDayTime(6000L);
+			}
+		}
+	}
+
+	public static class NoWeatherModule extends Module {
+		public NoWeatherModule() {
+			super("NoWeather", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+	}
+
+	public static class NoBlindModule extends Module {
+		public NoBlindModule() {
+			super("NoBlind", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+	}
+
+	public static class FreecamModule extends Module {
+		private static final double FLY_SPEED = 0.85;
+		private static final double VERTICAL_SPEED = 0.65;
+
+		private static boolean active = false;
+		private static Vec3 camPos = Vec3.ZERO;
+		private static float camYaw = 0.0f;
+		private static float camPitch = 0.0f;
+
+		private Vec3 savedPlayerPos = Vec3.ZERO;
+		private Vec3 savedPlayerVel = Vec3.ZERO;
+		private boolean savedNoPhysics = false;
+		private boolean savedMayFly = false;
+		private boolean savedFlying = false;
+
+		public FreecamModule() {
+			super("Freecam", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		public static boolean isActive() {
+			return active;
+		}
+
+		public static Vec3 getCamPos() {
+			return camPos;
+		}
+
+		public static float getCamYaw() {
+			return camYaw;
+		}
+
+		public static float getCamPitch() {
+			return camPitch;
+		}
+
+		@Override
+		public void onEnable() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null) {
+				active = false;
+				return;
+			}
+
+			active = true;
+			savedPlayerPos = mc.player.position();
+			savedPlayerVel = mc.player.getDeltaMovement();
+			savedNoPhysics = mc.player.noPhysics;
+			savedMayFly = mc.player.getAbilities().mayfly;
+			savedFlying = mc.player.getAbilities().flying;
+
+			camPos = mc.player.getEyePosition();
+			camYaw = mc.player.getYRot();
+			camPitch = mc.player.getXRot();
+
+			mc.player.noPhysics = true;
+			mc.player.setDeltaMovement(Vec3.ZERO);
+			mc.player.getAbilities().mayfly = true;
+			mc.player.getAbilities().flying = true;
+		}
+
+		@Override
+		public void onDisable() {
+			active = false;
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player != null) {
+				mc.player.noPhysics = savedNoPhysics;
+				mc.player.getAbilities().mayfly = savedMayFly;
+				mc.player.getAbilities().flying = savedFlying;
+				mc.player.setDeltaMovement(savedPlayerVel);
+			}
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) {
+				active = false;
+				return;
+			}
+
+			if (!active) {
+				onEnable();
+			}
+
+			mc.player.setPos(savedPlayerPos.x, savedPlayerPos.y, savedPlayerPos.z);
+			mc.player.setDeltaMovement(Vec3.ZERO);
+			mc.player.fallDistance = 0.0f;
+
+			camYaw = mc.player.getYRot();
+			camPitch = mc.player.getXRot();
+
+			double yawRad = Math.toRadians(camYaw);
+			double forwardX = -Math.sin(yawRad);
+			double forwardZ = Math.cos(yawRad);
+			double rightX = -Math.cos(yawRad);
+			double rightZ = -Math.sin(yawRad);
+
+			double moveForward = 0.0;
+			double moveStrafe = 0.0;
+			double moveVertical = 0.0;
+
+			if (mc.options.keyUp.isDown()) moveForward += 1.0;
+			if (mc.options.keyDown.isDown()) moveForward -= 1.0;
+			if (mc.options.keyRight.isDown()) moveStrafe += 1.0;
+			if (mc.options.keyLeft.isDown()) moveStrafe -= 1.0;
+			if (mc.options.keyJump.isDown()) moveVertical += 1.0;
+			if (mc.options.keyShift.isDown()) moveVertical -= 1.0;
+
+			double speedMultiplier = mc.options.keySprint.isDown() ? 1.8 : 1.0;
+			double horizSpeed = FLY_SPEED * speedMultiplier;
+			double vertSpeed = VERTICAL_SPEED * speedMultiplier;
+
+			double dx = (forwardX * moveForward + rightX * moveStrafe) * horizSpeed;
+			double dz = (forwardZ * moveForward + rightZ * moveStrafe) * horizSpeed;
+			double dy = moveVertical * vertSpeed;
+
+			if (dx != 0.0 || dy != 0.0 || dz != 0.0) {
+				double len = Math.hypot(dx, dz);
+				if (len > horizSpeed && (moveForward != 0.0 && moveStrafe != 0.0)) {
+					double scale = horizSpeed / len;
+					dx *= scale;
+					dz *= scale;
+				}
+				camPos = camPos.add(dx, dy, dz);
+			}
+		}
+	}
+
+	public static class SpectateModule extends Module {
+		private static final double MAX_RANGE = 64.0;
+		private static boolean active = false;
+		private static LivingEntity targetEntity = null;
+
+		public SpectateModule() {
+			super("Spectate", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		public static boolean isActive() {
+			return active && targetEntity != null && targetEntity.isAlive();
+		}
+
+		public static LivingEntity getTargetEntity() {
+			return targetEntity;
+		}
+
+		@Override
+		public void onEnable() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) {
+				active = false;
+				targetEntity = null;
+				return;
+			}
+
+			LivingEntity best = null;
+			double bestDist = MAX_RANGE;
+
+			for (Entity entity : mc.level.entitiesForRendering()) {
+				if (entity == mc.player || !(entity instanceof LivingEntity living)) {
+					continue;
+				}
+				if (!living.isAlive() || !(living.getHealth() > 0)) {
+					continue;
+				}
+
+				double dist = mc.player.distanceTo(living);
+				if (dist <= bestDist) {
+					bestDist = dist;
+					best = living;
+				}
+			}
+
+			if (best == null) {
+				active = false;
+				targetEntity = null;
+				return;
+			}
+
+			targetEntity = best;
+			active = true;
+		}
+
+		@Override
+		public void onDisable() {
+			active = false;
+			targetEntity = null;
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) {
+				onDisable();
+				return;
+			}
+
+			if (targetEntity == null || !targetEntity.isAlive() || targetEntity.isRemoved()) {
+				onEnable();
+			}
+		}
+	}
+
+	public static class NoClipModule extends Module {
+		private static final double MOVE_SPEED = 0.25;
+		private static boolean active = false;
+		private boolean savedMayFly = false;
+		private boolean savedFlying = false;
+
+		public NoClipModule() {
+			super("NoClip", Category.MOVEMENT, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		public static boolean isActive() {
+			return active;
+		}
+
+		@Override
+		public void onEnable() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null) {
+				active = false;
+				return;
+			}
+			active = true;
+			savedMayFly = mc.player.getAbilities().mayfly;
+			savedFlying = mc.player.getAbilities().flying;
+			mc.player.getAbilities().mayfly = true;
+			mc.player.getAbilities().flying = true;
+			mc.player.setDeltaMovement(0, 0, 0);
+			mc.player.hasImpulse = true;
+		}
+
+		@Override
+		public void onDisable() {
+			active = false;
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player != null) {
+				mc.player.getAbilities().mayfly = savedMayFly;
+				mc.player.getAbilities().flying = savedFlying;
+				mc.player.setDeltaMovement(0, 0, 0);
+				mc.player.hasImpulse = true;
+			}
+		}
+
+		@Override
+		public void onTick() {
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null || !active) {
+				return;
+			}
+
+			mc.player.noPhysics = true;
+			mc.player.fallDistance = 0.0f;
+
+			double yawRad = Math.toRadians(mc.player.getYRot());
+			double forwardX = -Math.sin(yawRad);
+			double forwardZ = Math.cos(yawRad);
+			double rightX = -Math.cos(yawRad);
+			double rightZ = -Math.sin(yawRad);
+
+			double moveForward = 0.0;
+			double moveStrafe = 0.0;
+			double moveVertical = 0.0;
+
+			if (mc.options.keyUp.isDown()) moveForward += 1.0;
+			if (mc.options.keyDown.isDown()) moveForward -= 1.0;
+			if (mc.options.keyRight.isDown()) moveStrafe += 1.0;
+			if (mc.options.keyLeft.isDown()) moveStrafe -= 1.0;
+			if (mc.options.keyJump.isDown()) moveVertical += 1.0;
+			if (mc.options.keyShift.isDown()) moveVertical -= 1.0;
+
+			double speed = mc.options.keySprint.isDown() ? MOVE_SPEED * 1.6 : MOVE_SPEED;
+			double dx = (forwardX * moveForward + rightX * moveStrafe) * speed;
+			double dz = (forwardZ * moveForward + rightZ * moveStrafe) * speed;
+			double dy = moveVertical * speed;
+
+			if (dx != 0.0 || dy != 0.0 || dz != 0.0) {
+				double nextX = mc.player.getX() + dx;
+				double nextY = mc.player.getY() + dy;
+				double nextZ = mc.player.getZ() + dz;
+
+				mc.player.setPos(nextX, nextY, nextZ);
+				mc.player.setDeltaMovement(0, 0, 0);
+				mc.player.hasImpulse = true;
+			}
+		}
+	}
+
+	public static class NoSlowModule extends Module {
+		private static boolean active = false;
+
+		public NoSlowModule() {
+			super("NoSlow", Category.MOVEMENT, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		public static boolean isActive() {
+			return active;
+		}
+
+		@Override
+		public void onEnable() {
+			active = true;
+		}
+
+		@Override
+		public void onDisable() {
+			active = false;
+		}
+
+		@Override
+		public void onTick() {
+			if (!active) {
+				return;
+			}
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) { return; }
+
+
+			if (mc.player.isUsingItem() && !mc.player.isPassenger()) {
+				boolean movingInput = mc.options.keyUp.isDown()
+						|| mc.options.keyDown.isDown()
+						|| mc.options.keyLeft.isDown()
+						|| mc.options.keyRight.isDown();
+				if (movingInput) {
+					Vec3 vel = mc.player.getDeltaMovement();
+					double boost = 1.35;
+					double maxSpeed = mc.player.isSprinting() ? 0.28 : 0.21;
+					double nx = vel.x * boost;
+					double nz = vel.z * boost;
+					double speed = Math.hypot(nx, nz);
+					if (speed > maxSpeed) {
+						double scale = maxSpeed / speed;
+						nx *= scale;
+						nz *= scale;
+					}
+					mc.player.setDeltaMovement(nx, vel.y, nz);
+				}
+			}
+		}
+	}
+
+	public static class NoDizzyModule extends Module {
+		private static boolean active = false;
+
+		public NoDizzyModule() {
+			super("NoDizzy", Category.RENDER, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		public static boolean isActive() {
+			return active;
+		}
+
+		@Override
+		public void onEnable() {
+			active = true;
+		}
+
+		@Override
+		public void onDisable() {
+			active = false;
+		}
+
+		@Override
+		public void onTick() {
+			if (!active) {
+				return;
+			}
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player != null) {
+				mc.player.spinningEffectIntensity = 0.0F;
+				mc.player.oSpinningEffectIntensity = 0.0F;
+			}
+		}
+	}
+
+	public static class NoSlipModule extends Module {
+		private static boolean active = false;
+
+		public NoSlipModule() {
+			super("NoSlip", Category.MOVEMENT, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		public static boolean isActive() {
+			return active;
+		}
+
+		@Override
+		public void onEnable() {
+			active = true;
+		}
+
+		@Override
+		public void onDisable() {
+			active = false;
+		}
+
+		@Override
+		public void onTick() {
+			if (!active) {
+				return;
+			}
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
+
+			BlockPos belowPos = mc.player.getOnPos();
+			BlockState belowState = mc.level.getBlockState(belowPos);
+			boolean onIce = belowState.is(Blocks.ICE)
+					|| belowState.is(Blocks.PACKED_ICE)
+					|| belowState.is(Blocks.BLUE_ICE)
+					|| belowState.is(Blocks.FROSTED_ICE);
+
+			if (onIce && mc.player.onGround()) {
+				Vec3 vel = mc.player.getDeltaMovement();
+				boolean movingInput = mc.options.keyUp.isDown()
+						|| mc.options.keyDown.isDown()
+						|| mc.options.keyLeft.isDown()
+						|| mc.options.keyRight.isDown();
+
+				if (movingInput) {
+					double maxNormalSpeed = mc.player.isSprinting() ? 0.28 : 0.21;
+					double horizSpeed = Math.hypot(vel.x, vel.z);
+					if (horizSpeed > maxNormalSpeed) {
+						double scale = maxNormalSpeed / horizSpeed;
+						mc.player.setDeltaMovement(vel.x * scale, vel.y, vel.z * scale);
+					}
+				} else {
+					mc.player.setDeltaMovement(vel.x * 0.55, vel.y, vel.z * 0.55);
+				}
+			}
+		}
+	}
+
+	public static class DolphinModule extends Module {
+		private static boolean active = false;
+		private static final double FLOAT_UP_SPEED = 0.045;
+		private static final double MAX_UP_VELOCITY = 0.14;
+
+		public DolphinModule() {
+			super("Dolphin", Category.MOVEMENT, GLFW.GLFW_KEY_UNKNOWN);
+		}
+
+		@Override
+		public Scope getScope() {
+			return Scope.SERVER;
+		}
+
+		public static boolean isActive() {
+			return active;
+		}
+
+		@Override
+		public void onEnable() {
+			active = true;
+		}
+
+		@Override
+		public void onDisable() {
+			active = false;
+		}
+
+		@Override
+		public void onTick() {
+			if (!active) {
+				return;
+			}
+
+			Minecraft mc = Minecraft.getInstance();
+			if (mc.player == null || mc.level == null) {
+				return;
+			}
+
+			if (mc.options.keyShift.isDown()) {
+				return;
+			}
+
+			if (mc.player.isInWater()) {
+				Vec3 vel = mc.player.getDeltaMovement();
+				double nextY = vel.y;
+
+				if (nextY < MAX_UP_VELOCITY) {
+					nextY = Math.min(MAX_UP_VELOCITY, Math.max(nextY + FLOAT_UP_SPEED, FLOAT_UP_SPEED));
+				}
+
+				mc.player.setDeltaMovement(vel.x, nextY, vel.z);
+			}
+		}
+	}
+
+
 }
